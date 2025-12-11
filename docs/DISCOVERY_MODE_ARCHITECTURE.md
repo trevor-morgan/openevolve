@@ -230,18 +230,170 @@ openevolve/
 │   ├── problem_space.py         # ProblemSpace, ProblemEvolver
 │   ├── skeptic.py               # AdversarialSkeptic, FalsificationResult
 │   ├── epistemic_archive.py     # Phenotype, EpistemicArchive
-│   └── engine.py                # DiscoveryEngine (main integration)
+│   ├── engine.py                # DiscoveryEngine (main integration)
+│   │
+│   │   # Heisenberg Engine (Ontological Expansion)
+│   ├── ontology.py              # Variable, Ontology, OntologyManager
+│   ├── crisis_detector.py       # EpistemicCrisis, CrisisDetector
+│   ├── instrument_synthesizer.py # Probe, InstrumentSynthesizer
+│   └── code_instrumenter.py     # CodeInstrumenter, TraceCollector
 │
 ├── examples/
-│   └── discovery_mode/
-│       ├── run_discovery.py     # Example runner
-│       ├── initial_sort.py      # Starting program
-│       ├── evaluator.py         # Multi-stage evaluator
-│       ├── config.yaml          # Discovery config
+│   ├── discovery_mode/
+│   │   ├── run_discovery.py     # Example runner
+│   │   ├── initial_sort.py      # Starting program
+│   │   ├── evaluator.py         # Multi-stage evaluator
+│   │   ├── config.yaml          # Discovery config
+│   │   └── README.md            # Usage guide
+│   │
+│   └── heisenberg_demo/         # Heisenberg Engine demo
+│       ├── initial_program.py   # Starting sort program
+│       ├── evaluator.py         # Evaluator with hidden cache variable
+│       ├── config.yaml          # Config with Heisenberg enabled
 │       └── README.md            # Usage guide
+│
+├── tests/
+│   ├── test_discovery.py        # Discovery mode tests
+│   └── test_heisenberg.py       # Heisenberg Engine tests
 │
 └── docs/
     └── DISCOVERY_MODE_ARCHITECTURE.md  # This document
+```
+
+---
+
+## Module 4: Heisenberg Engine (Ontological Expansion)
+
+**Purpose**: Discover NEW variables when optimization is stuck.
+
+**Location**: `openevolve/discovery/ontology.py`, `crisis_detector.py`, `instrument_synthesizer.py`, `code_instrumenter.py`
+
+**Key Insight**: Traditional AI optimizes relationships between KNOWN variables. True scientific discovery requires finding NEW variables. The Heisenberg Engine detects when optimization is fundamentally stuck because the model is missing a variable.
+
+### Key Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `Variable` | `ontology.py` | Represents a discovered or known variable |
+| `Ontology` | `ontology.py` | Collection of variables with lineage tracking |
+| `OntologyManager` | `ontology.py` | Creates, expands, and tracks ontologies |
+| `EpistemicCrisis` | `crisis_detector.py` | Represents a detected plateau/crisis |
+| `CrisisDetector` | `crisis_detector.py` | Monitors fitness for plateau detection |
+| `Probe` | `instrument_synthesizer.py` | LLM-generated code to discover hidden patterns |
+| `InstrumentSynthesizer` | `instrument_synthesizer.py` | Creates and executes probes |
+| `CodeInstrumenter` | `code_instrumenter.py` | Auto-instruments code for tracing |
+
+### How It Works
+
+```
+1. Normal Evolution
+   │
+   ▼
+2. Crisis Detector monitors fitness history
+   │  ├─ Plateau detected? (no improvement over N iterations)
+   │  ├─ Systematic bias? (consistent error patterns)
+   │  └─ Unexplained variance? (similar code, different results)
+   │
+   ▼ (if crisis detected)
+3. InstrumentSynthesizer generates probes
+   │  └─ Probes analyze artifacts for hidden patterns
+   │
+   ▼
+4. Execute probes, validate discoveries
+   │  └─ Statistical validation (5 trials, check correlation)
+   │
+   ▼
+5. OntologyManager expands the state space
+   │  └─ Add new variable to known variables
+   │
+   ▼
+6. Soft Reset
+   │  ├─ Keep top N programs
+   │  ├─ Update problem description with new variable
+   │  └─ Reset crisis detector
+   │
+   ▼
+7. Continue evolution with expanded ontology
+   └─ LLM now knows about the new variable!
+```
+
+### Crisis Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `plateau` | Fitness stagnates despite diverse attempts | Stuck at 0.7 for 50 iterations |
+| `systematic_bias` | Consistent error patterns | Always fails on large inputs |
+| `unexplained_variance` | High variability with similar code | Same algorithm, 2x perf difference |
+
+### Probe Types
+
+| Type | Purpose | Discovers |
+|------|---------|-----------|
+| `state` | Analyze intermediate values | Hidden accumulators, cached values |
+| `gradient` | Analyze fitness landscape | Unexplored improvement directions |
+| `coverage` | Find unexplored regions | Untested input ranges |
+| `numerical` | Detect stability issues | Precision, overflow problems |
+
+### Integration Point
+
+```python
+# In process_program() after evaluation
+if self.crisis_detector is not None:
+    self.crisis_detector.record_evaluation(
+        iteration=current_iteration,
+        metrics=program.metrics,
+        artifacts=program.metadata.get("artifacts", {})
+    )
+
+    crisis = self.crisis_detector.detect_crisis()
+    if crisis:
+        await self._handle_epistemic_crisis(crisis, program)
+```
+
+### Configuration
+
+```yaml
+discovery:
+  heisenberg:
+    enabled: true
+
+    # Crisis detection
+    min_plateau_iterations: 50
+    fitness_improvement_threshold: 0.001
+    crisis_confidence_threshold: 0.7
+
+    # Probe synthesis
+    max_probes_per_crisis: 5
+    probe_timeout: 60.0
+
+    # Validation
+    validation_trials: 5
+    min_correlation_threshold: 0.6
+
+    # Soft reset
+    programs_to_keep_on_reset: 10
+
+    # Instrumentation
+    auto_instrument: true
+    instrumentation_level: "standard"
+```
+
+### Example: Cache Locality Discovery
+
+```
+Problem: Optimize sorting algorithm
+
+1. Evolution improves O(n²) → O(n log n)
+2. Fitness plateaus at 0.68
+3. Crisis detected (type: plateau, confidence: 0.85)
+4. Probe analyzes artifacts, finds:
+   - cache_hit_rate correlates with performance (r=0.73)
+5. Ontology expands: adds "memory_access_pattern"
+6. Soft reset, problem updated:
+   "Optimize sorting considering memory access patterns"
+7. Evolution resumes, reaches 0.91 fitness
+
+New variable discovered: cache locality matters!
 ```
 
 ---
@@ -254,23 +406,32 @@ openevolve/
 - [x] `EpistemicArchive` with phenotype tracking
 - [x] `DiscoveryEngine` integration
 
-### Phase 2: Deep Integration
-- [ ] Modify `Controller.run()` to call DiscoveryEngine
-- [ ] Add discovery config to main `Config` class
-- [ ] Integrate problem context into prompt templates
-- [ ] Add discovery metrics to evolution trace
+### Phase 2: Deep Integration (Complete)
+- [x] Modify `Controller.run()` to call DiscoveryEngine
+- [x] Add discovery config to main `Config` class
+- [x] Integrate problem context into prompt templates
+- [x] Add discovery metrics to evolution trace
 
-### Phase 3: Advanced Features
+### Phase 3: Heisenberg Engine (Complete)
+- [x] Crisis detection (plateau, bias, variance)
+- [x] Probe synthesis with LLM
+- [x] Code instrumentation for tracing
+- [x] Statistical validation of discoveries
+- [x] Ontology expansion with soft reset
+- [x] Checkpoint/resume support
+
+### Phase 4: Advanced Features
 - [ ] Blind reproduction test with separate LLM
 - [ ] Adaptive attack selection based on history
 - [ ] Cross-run knowledge transfer
 - [ ] Multi-objective problem evolution
 
-### Phase 4: Tooling
+### Phase 5: Tooling
 - [ ] Visualizer for problem evolution tree
 - [ ] Discovery event timeline UI
 - [ ] Phenotype space explorer
 - [ ] Surprise heatmaps
+- [ ] Ontology lineage visualizer
 
 ---
 

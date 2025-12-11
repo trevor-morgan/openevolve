@@ -365,6 +365,49 @@ class SkepticConfig:
 
 
 @dataclass
+class HeisenbergConfig:
+    """Configuration for Ontological Expansion (Heisenberg Engine)
+
+    The Heisenberg Engine detects when optimization is fundamentally stuck
+    due to missing variables in the model (not just bad solutions) and
+    automatically expands the state space by discovering hidden variables.
+
+    Key insight: There's a difference between:
+    - "We haven't optimized well enough" (keep trying)
+    - "Our model cannot represent the solution" (need new variables)
+    """
+
+    # Enable/disable
+    enabled: bool = False
+
+    # Crisis detection
+    min_plateau_iterations: int = 50  # Min iterations before declaring plateau
+    fitness_improvement_threshold: float = 0.001  # Below this = no improvement
+    variance_window: int = 20  # Window size for variance calculation
+    crisis_confidence_threshold: float = 0.7  # Min confidence to trigger crisis
+    cooldown_iterations: int = 30  # Wait after crisis before detecting another
+
+    # Probe synthesis
+    max_probes_per_crisis: int = 5  # Max probes to generate per crisis
+    probe_timeout: float = 60.0  # Timeout for probe execution (seconds)
+
+    # Statistical validation
+    validation_trials: int = 5  # Number of trials for validation
+    min_correlation_threshold: float = 0.6  # Min correlation to accept variable
+
+    # Ontology limits
+    max_ontology_generations: int = 10  # Max times to expand ontology
+    max_variables_per_ontology: int = 50  # Max variables in single ontology
+
+    # Soft reset behavior
+    programs_to_keep_on_reset: int = 10  # Top N programs to keep after expansion
+
+    # Auto-instrumentation
+    auto_instrument: bool = True  # Auto-instrument code to capture traces
+    instrumentation_level: str = "standard"  # "minimal", "standard", "comprehensive"
+
+
+@dataclass
 class DiscoveryConfig:
     """Configuration for Discovery Mode - Open-Ended Scientific Discovery"""
 
@@ -396,6 +439,9 @@ class DiscoveryConfig:
     # Logging
     log_discoveries: bool = True
     discovery_log_path: Optional[str] = None  # Defaults to output_dir/discovery_log.jsonl
+
+    # Heisenberg Engine (Ontological Expansion)
+    heisenberg: HeisenbergConfig = field(default_factory=HeisenbergConfig)
 
 
 @dataclass
@@ -481,6 +527,9 @@ class Config:
             # Handle nested skeptic config
             if "skeptic" in discovery_dict:
                 discovery_dict["skeptic"] = SkepticConfig(**discovery_dict["skeptic"])
+            # Handle nested heisenberg config
+            if "heisenberg" in discovery_dict:
+                discovery_dict["heisenberg"] = HeisenbergConfig(**discovery_dict["heisenberg"])
             config.discovery = DiscoveryConfig(**discovery_dict)
 
         return config

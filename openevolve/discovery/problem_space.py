@@ -43,6 +43,9 @@ class ProblemSpace:
         evaluation_template: Code template for evaluating solutions
         test_cases: Known test cases for this problem variant
         metadata: Additional problem-specific data
+        ontology_id: ID of the ontology (state space) associated with this problem
+        ontology_generation: Generation of the ontology when problem was created
+        known_variables: List of variable names in the current ontology
     """
     id: str
     description: str
@@ -58,6 +61,11 @@ class ProblemSpace:
 
     # Track which solutions have "solved" this problem
     solved_by: List[str] = field(default_factory=list)
+
+    # Ontology (state space) tracking - for Heisenberg Engine
+    ontology_id: Optional[str] = None
+    ontology_generation: int = 0
+    known_variables: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary"""
@@ -87,10 +95,76 @@ class ProblemSpace:
                 lines.append(f"{i}. {obj}")
             lines.append("")
 
+        # Include ontology information if available
+        if self.known_variables:
+            lines.append("### Known Variables (State Space):")
+            for var in self.known_variables:
+                lines.append(f"- {var}")
+            lines.append("")
+            lines.append(f"Ontology Generation: {self.ontology_generation}")
+            lines.append("")
+
         lines.append(f"Difficulty Level: {self.difficulty_level:.1f}")
         lines.append(f"Problem Generation: {self.generation}")
 
         return "\n".join(lines)
+
+    def update_for_ontology(
+        self,
+        ontology_id: str,
+        ontology_generation: int,
+        variable_names: List[str],
+        variable_descriptions: Optional[Dict[str, str]] = None,
+    ) -> "ProblemSpace":
+        """
+        Create a new problem variant updated with ontology information.
+
+        This is called when the Heisenberg Engine discovers new variables -
+        the problem description is updated to reflect the expanded state space.
+
+        Args:
+            ontology_id: ID of the new ontology
+            ontology_generation: Generation number of the ontology
+            variable_names: List of variable names in the ontology
+            variable_descriptions: Optional dict mapping var names to descriptions
+
+        Returns:
+            New ProblemSpace with ontology context added
+        """
+        import uuid
+
+        # Build description addition for new variables
+        new_vars = [v for v in variable_names if v not in self.known_variables]
+        desc_addition = ""
+        if new_vars:
+            var_list = ", ".join(new_vars)
+            desc_addition = f"\n\n[ONTOLOGY EXPANDED: New variables discovered: {var_list}. " \
+                           f"These may affect solution performance in ways not previously considered.]"
+
+        # Create new problem with ontology info
+        new_problem = ProblemSpace(
+            id=f"prob_{uuid.uuid4().hex[:8]}",
+            parent_id=self.id,
+            description=self.description + desc_addition,
+            constraints=self.constraints.copy(),
+            objectives=self.objectives.copy(),
+            difficulty_level=self.difficulty_level,
+            generation=self.generation,  # Don't increment - not a problem mutation
+            evaluation_template=self.evaluation_template,
+            test_cases=self.test_cases.copy(),
+            metadata={
+                **self.metadata,
+                "ontology_expanded": True,
+                "previous_ontology_id": self.ontology_id,
+                "new_variables": new_vars,
+            },
+            solved_by=[],  # Reset solutions for new ontology context
+            ontology_id=ontology_id,
+            ontology_generation=ontology_generation,
+            known_variables=variable_names,
+        )
+
+        return new_problem
 
     def is_solved(self, threshold: float = 0.9) -> bool:
         """Check if this problem has been adequately solved"""

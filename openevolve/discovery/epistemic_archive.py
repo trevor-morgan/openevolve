@@ -52,6 +52,10 @@ class Phenotype:
     worst_case_complexity: str = "O(?)"
     space_complexity: str = "O(?)"
 
+    # Ontology tracking - for Heisenberg Engine
+    ontology_generation: int = 0  # Which ontology generation this was evaluated under
+    extracted_variables: Dict[str, Any] = field(default_factory=dict)  # Values of ontology variables
+
     def to_grid_coords(self, num_bins: int = 10) -> Tuple[int, int]:
         """Convert phenotype to 2D grid coordinates for MAP-Elites"""
         x = min(self.complexity, num_bins - 1)
@@ -84,7 +88,29 @@ class Phenotype:
             "best_case_complexity": self.best_case_complexity,
             "worst_case_complexity": self.worst_case_complexity,
             "space_complexity": self.space_complexity,
+            "ontology_generation": self.ontology_generation,
+            "extracted_variables": self.extracted_variables,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Phenotype":
+        """Deserialize from dictionary"""
+        return cls(
+            complexity=data.get("complexity", 0),
+            efficiency=data.get("efficiency", 0),
+            robustness=data.get("robustness", 0),
+            generality=data.get("generality", 0),
+            approach_signature=data.get("approach_signature", ""),
+            uses_recursion=data.get("uses_recursion", False),
+            uses_iteration=data.get("uses_iteration", False),
+            uses_vectorization=data.get("uses_vectorization", False),
+            uses_memoization=data.get("uses_memoization", False),
+            best_case_complexity=data.get("best_case_complexity", "O(?)"),
+            worst_case_complexity=data.get("worst_case_complexity", "O(?)"),
+            space_complexity=data.get("space_complexity", "O(?)"),
+            ontology_generation=data.get("ontology_generation", 0),
+            extracted_variables=data.get("extracted_variables", {}),
+        )
 
 
 class PhenotypeExtractor:
@@ -264,6 +290,10 @@ class EpistemicArchive:
 
         # Cross-problem knowledge
         self.approach_library: Dict[str, Dict[str, Any]] = {}  # signature -> approach info
+
+        # Ontology tracking (for Heisenberg Engine)
+        self.current_ontology_generation: int = 0
+        self._ontology_history: List[Dict[str, Any]] = []
 
         logger.info(
             f"Initialized EpistemicArchive with dimensions: {self.phenotype_dimensions}"
@@ -473,3 +503,100 @@ class EpistemicArchive:
         # Sort by score and take top N
         scored.sort(key=lambda x: x[1], reverse=True)
         return [p for p, _ in scored[:n]]
+
+    def update_for_ontology(
+        self,
+        ontology_generation: int,
+        new_variables: List[str],
+    ) -> None:
+        """
+        Update the archive for a new ontology generation.
+
+        Called when the Heisenberg Engine expands the ontology with new variables.
+        This adds new dimensions to the phenotype tracking and can optionally
+        add the new variables as additional diversity dimensions.
+
+        Args:
+            ontology_generation: The new ontology generation number
+            new_variables: Names of newly discovered variables
+        """
+        self.current_ontology_generation = ontology_generation
+
+        # Optionally add new variables as phenotype dimensions
+        # This allows the MAP-Elites grid to diversify along discovered variables
+        for var_name in new_variables:
+            dimension_name = f"var_{var_name}"
+            if dimension_name not in self.phenotype_dimensions:
+                # Only add if we haven't exceeded max dimensions
+                if len(self.phenotype_dimensions) < 10:  # Cap at 10 dimensions
+                    self.phenotype_dimensions.append(dimension_name)
+                    logger.info(
+                        f"Added new phenotype dimension: {dimension_name} "
+                        f"(ontology gen {ontology_generation})"
+                    )
+
+        # Track the ontology expansion event
+        self._ontology_history.append({
+            "generation": ontology_generation,
+            "new_variables": new_variables,
+            "timestamp": time.time(),
+            "phenotype_dimensions": self.phenotype_dimensions.copy(),
+        })
+
+        logger.info(
+            f"Updated archive for ontology generation {ontology_generation}, "
+            f"new variables: {new_variables}"
+        )
+
+    def get_programs_for_reevaluation(
+        self,
+        n: int = 10,
+        ontology_generation: int = None,
+    ) -> List["Program"]:
+        """
+        Get top programs that should be re-evaluated after ontology expansion.
+
+        Programs evaluated under older ontology generations may perform
+        differently when considering newly discovered variables.
+
+        Args:
+            n: Number of programs to return
+            ontology_generation: If provided, get programs from this generation or earlier
+
+        Returns:
+            List of top programs for re-evaluation
+        """
+        programs = []
+        for program in self.database.programs.values():
+            phenotype_data = program.metadata.get("phenotype", {})
+            prog_ontology_gen = phenotype_data.get("ontology_generation", 0)
+
+            # Include if from older ontology generation
+            if ontology_generation is None or prog_ontology_gen < ontology_generation:
+                programs.append(program)
+
+        # Sort by combined_score descending
+        programs.sort(
+            key=lambda p: p.metrics.get("combined_score", 0.0),
+            reverse=True
+        )
+
+        return programs[:n]
+
+    def get_ontology_statistics(self) -> Dict[str, Any]:
+        """Get statistics about ontology evolution impact on archive"""
+        if not hasattr(self, '_ontology_history') or not self._ontology_history:
+            return {
+                "current_ontology_generation": getattr(self, 'current_ontology_generation', 0),
+                "expansion_count": 0,
+            }
+
+        return {
+            "current_ontology_generation": self.current_ontology_generation,
+            "expansion_count": len(self._ontology_history),
+            "total_discovered_variables": sum(
+                len(h["new_variables"]) for h in self._ontology_history
+            ),
+            "current_dimensions": len(self.phenotype_dimensions),
+            "history": self._ontology_history,
+        }

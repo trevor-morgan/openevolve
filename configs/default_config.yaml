@@ -209,3 +209,39 @@ discovery:
   # Logging
   log_discoveries: true               # Log discovery events
   discovery_log_path: null            # Custom path for discovery logs
+
+  # Heisenberg Engine (Ontological Expansion)
+  # Detects when optimization is stuck due to missing variables and discovers new ones
+  heisenberg:
+    enabled: false                    # Enable Heisenberg Engine for ontological expansion
+
+    # Crisis Detection
+    # Detects when optimization is fundamentally stuck (plateau, systematic bias, unexplained variance)
+    min_plateau_iterations: 50        # Minimum iterations before detecting plateau
+    fitness_improvement_threshold: 0.001  # Minimum improvement to not be considered plateau
+    variance_window: 20               # Window size for variance calculation
+    crisis_confidence_threshold: 0.7  # Minimum confidence to trigger crisis handling
+    cooldown_iterations: 30           # Iterations to wait after handling a crisis
+
+    # Probe Synthesis
+    # Probes are LLM-generated code that analyze artifacts to discover hidden variables
+    max_probes_per_crisis: 5          # Maximum probes to synthesize per crisis
+    probe_timeout: 60.0               # Timeout for probe execution in seconds
+
+    # Validation
+    # Statistical validation of discovered variables through multiple trials
+    validation_trials: 5              # Number of trials for validating discovered variables
+    min_correlation_threshold: 0.6    # Minimum correlation with fitness for valid variable
+
+    # Ontology Limits
+    max_ontology_generations: 10      # Maximum ontology expansion generations
+    max_variables_per_ontology: 50    # Maximum variables per ontology
+
+    # Soft Reset
+    # When ontology expands, keep top programs and re-evaluate with new context
+    programs_to_keep_on_reset: 10     # Number of top programs to keep on soft reset
+
+    # Code Instrumentation
+    # Auto-instruments evolved code to capture execution traces for probe analysis
+    auto_instrument: true             # Automatically instrument code for tracing
+    instrumentation_level: "standard" # Level: "minimal", "standard", "comprehensive"

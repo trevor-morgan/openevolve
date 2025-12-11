@@ -1,0 +1,90 @@
+# Heisenberg Engine Demo Configuration
+#
+# This example demonstrates ontological expansion - the ability to discover
+# that optimization is stuck because a hidden variable (cache efficiency)
+# is not being considered.
+
+max_iterations: 200
+checkpoint_interval: 20
+log_level: "INFO"
+
+# LLM configuration
+llm:
+  models:
+    - name: "gemini-2.0-flash"
+      weight: 1.0
+  temperature: 0.8
+  max_tokens: 4096
+
+# Database configuration
+database:
+  population_size: 100
+  archive_size: 50
+  num_islands: 3
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+
+# Evaluator configuration
+evaluator:
+  timeout: 60
+  parallel_evaluations: 2
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.3
+    - 0.5
+    - 0.7
+
+# Discovery Mode - ENABLED
+discovery:
+  enabled: true
+  problem_description: |
+    Optimize a sorting algorithm for maximum performance.
+    The goal is to achieve the fastest possible sorting while maintaining correctness.
+    Consider both algorithmic complexity and practical performance factors.
+
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 3
+
+  skeptic_enabled: true
+  skeptic:
+    num_attack_rounds: 2
+    attack_timeout: 10.0
+    static_analysis_enabled: true
+
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.15
+
+  solution_threshold: 0.75
+
+  # Heisenberg Engine - ENABLED
+  # This is the key feature for this demo
+  heisenberg:
+    enabled: true
+
+    # Crisis detection - tuned for this demo
+    min_plateau_iterations: 30        # Detect plateau after 30 iterations
+    fitness_improvement_threshold: 0.005  # 0.5% improvement threshold
+    variance_window: 15
+    crisis_confidence_threshold: 0.6
+    cooldown_iterations: 20
+
+    # Probe synthesis
+    max_probes_per_crisis: 3
+    probe_timeout: 30.0
+
+    # Validation
+    validation_trials: 3
+    min_correlation_threshold: 0.5
+
+    # Ontology limits
+    max_ontology_generations: 5
+    max_variables_per_ontology: 20
+
+    # Soft reset
+    programs_to_keep_on_reset: 5
+
+    # Instrumentation
+    auto_instrument: true
+    instrumentation_level: "standard"
