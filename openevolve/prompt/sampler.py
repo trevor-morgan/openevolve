@@ -62,6 +62,8 @@ class PromptSampler:
         template_key: Optional[str] = None,
         program_artifacts: Optional[Dict[str, Union[str, bytes]]] = None,
         feature_dimensions: Optional[List[str]] = None,
+        problem_context: Optional[str] = None,  # Discovery mode: problem description
+        discovery_mode: bool = False,  # Whether to use discovery templates
         **kwargs: Any,
     ) -> Dict[str, str]:
         """
@@ -79,6 +81,8 @@ class PromptSampler:
             diff_based_evolution: Whether to use diff-based evolution (True) or full rewrites (False)
             template_key: Optional override for template key
             program_artifacts: Optional artifacts from program evaluation
+            problem_context: Optional problem description for discovery mode
+            discovery_mode: Whether to use discovery-specific templates
             **kwargs: Additional keys to replace in the user prompt
 
         Returns:
@@ -91,6 +95,9 @@ class PromptSampler:
         elif self.user_template_override:
             # Use the override set with set_templates
             user_template_key = self.user_template_override
+        elif discovery_mode:
+            # Use discovery templates when in discovery mode
+            user_template_key = "discovery_diff_user" if diff_based_evolution else "discovery_full_rewrite_user"
         else:
             # Default behavior: diff-based vs full rewrite
             user_template_key = "diff_user" if diff_based_evolution else "full_rewrite_user"
@@ -101,6 +108,9 @@ class PromptSampler:
         # Use system template override if set
         if self.system_template_override:
             system_message = self.template_manager.get_template(self.system_template_override)
+        elif discovery_mode:
+            # Use discovery system template when in discovery mode
+            system_message = self.template_manager.get_template("discovery_system")
         else:
             system_message = self.config.system_message
             # If system_message is a template name rather than content, get the template
@@ -134,6 +144,9 @@ class PromptSampler:
         fitness_score = get_fitness_score(program_metrics, feature_dimensions)
         feature_coords = format_feature_coordinates(program_metrics, feature_dimensions)
 
+        # Prepare problem context for discovery mode
+        problem_context_str = problem_context or ""
+
         # Format the final user message
         user_message = user_template.format(
             metrics=metrics_str,
@@ -145,6 +158,7 @@ class PromptSampler:
             current_program=current_program,
             language=language,
             artifacts=artifacts_section,
+            problem_context=problem_context_str,  # Discovery mode context
             **kwargs,
         )
 

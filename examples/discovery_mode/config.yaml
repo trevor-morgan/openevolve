@@ -1,0 +1,81 @@
+# Discovery Mode Example Configuration
+#
+# This config is optimized for demonstrating the Discovery Engine's
+# three key capabilities:
+# 1. Problem Evolution - Questions evolve with solutions
+# 2. Adversarial Skepticism - Programs are tested, not just evaluated
+# 3. Surprise-Based Curiosity - Unexpected results drive exploration
+
+# General settings
+max_iterations: 100
+checkpoint_interval: 20
+log_level: "INFO"
+random_seed: 42
+
+# Evolution settings
+diff_based_evolution: true
+max_code_length: 5000
+
+# LLM configuration
+llm:
+  models:
+    - name: "gpt-4o-mini"  # Fast model for iteration
+      weight: 0.7
+    - name: "gpt-4o"  # Capable model for harder problems
+      weight: 0.3
+
+  api_base: "https://api.openai.com/v1"
+  temperature: 0.8  # Higher for more exploration
+  max_tokens: 2048
+
+# Prompt configuration
+prompt:
+  system_message: |
+    You are a brilliant algorithm designer working on sorting algorithms.
+    Your goal is to create solutions that are:
+    1. CORRECT - Handle all edge cases
+    2. EFFICIENT - Minimize time complexity
+    3. ROBUST - Handle unexpected inputs gracefully
+
+    The problem you're solving may have evolved from a simpler version.
+    Pay attention to any constraints that have been added.
+
+  num_top_programs: 3
+  num_diverse_programs: 2
+  use_template_stochasticity: true
+
+# Database configuration - Enhanced for Discovery Mode
+database:
+  population_size: 200
+  archive_size: 50
+  num_islands: 3
+
+  # Feature dimensions for behavioral diversity
+  # These map to phenotype characteristics
+  feature_dimensions:
+    - "complexity"   # Code complexity (structural)
+    - "efficiency"   # Runtime efficiency (behavioral)
+
+  feature_bins: 10
+  migration_interval: 20
+  migration_rate: 0.15
+
+# Evaluator configuration
+evaluator:
+  timeout: 30
+  max_retries: 2
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.3  # Stage 1: Basic correctness
+    - 0.6  # Stage 2: Edge cases
+    - 0.8  # Stage 3: Performance
+
+  parallel_evaluations: 2
+  use_llm_feedback: false  # Disabled - using adversarial skeptic instead
+
+# Evolution trace - Important for understanding discoveries
+evolution_trace:
+  enabled: true
+  format: "jsonl"
+  include_code: true
+  include_prompts: true

@@ -155,6 +155,94 @@ Return your evaluation as a JSON object with the following format:
 """
 
 # Default templates dictionary
+# Discovery mode system template - emphasizes problem evolution
+DISCOVERY_SYSTEM_TEMPLATE = """You are an expert software developer and research scientist.
+Your job is to solve evolving research problems through code optimization.
+
+Key principles:
+1. Pay careful attention to the PROBLEM CONSTRAINTS - they may have evolved
+2. Focus on NOVEL approaches, not just incremental improvements
+3. Handle EDGE CASES robustly - your code will be tested adversarially
+4. Consider TRADE-OFFS between different objectives
+
+The problem you're solving may be more challenging than previous versions.
+Read the problem description and constraints carefully before making changes.
+"""
+
+# Discovery mode diff template - includes problem context
+DISCOVERY_DIFF_USER_TEMPLATE = """# Research Problem
+{problem_context}
+
+# Current Program Information
+- Current performance metrics: {metrics}
+- Fitness Score: {fitness_score}
+- Feature Coordinates: {feature_coords} (dimensions: {feature_dimensions})
+- Areas identified for improvement: {improvement_areas}
+
+{artifacts}
+
+# Program Evolution History
+{evolution_history}
+
+# Current Program
+```{language}
+{current_program}
+```
+
+# Task
+Improve the program to better solve the research problem above.
+
+IMPORTANT:
+- Read the problem CONSTRAINTS carefully - they may have evolved
+- Your code will be tested with ADVERSARIAL inputs (edge cases, invalid data, etc.)
+- Consider novel algorithmic approaches, not just parameter tweaks
+
+You MUST use the exact SEARCH/REPLACE diff format:
+
+<<<<<<< SEARCH
+# Original code to find and replace (must match exactly)
+=======
+# New replacement code
+>>>>>>> REPLACE
+
+You can suggest multiple changes. Each SEARCH section must exactly match code in the current program.
+Be thoughtful about your changes and explain your reasoning thoroughly.
+"""
+
+# Discovery mode full rewrite template
+DISCOVERY_FULL_REWRITE_TEMPLATE = """# Research Problem
+{problem_context}
+
+# Current Program Information
+- Current performance metrics: {metrics}
+- Fitness Score: {fitness_score}
+- Feature Coordinates: {feature_coords} (dimensions: {feature_dimensions})
+- Areas identified for improvement: {improvement_areas}
+
+{artifacts}
+
+# Program Evolution History
+{evolution_history}
+
+# Current Program
+```{language}
+{current_program}
+```
+
+# Task
+Rewrite the program to better solve the research problem above.
+
+IMPORTANT:
+- Read the problem CONSTRAINTS carefully - they may have evolved
+- Your code will be tested with ADVERSARIAL inputs (edge cases, invalid data, etc.)
+- Consider novel algorithmic approaches, not just parameter tweaks
+- Maintain the same function signature/API as the original
+
+```{language}
+# Your rewritten program here
+```
+"""
+
 DEFAULT_TEMPLATES = {
     "system_message": BASE_SYSTEM_TEMPLATE,
     "evaluator_system_message": BASE_EVALUATOR_SYSTEM_TEMPLATE,
@@ -166,6 +254,10 @@ DEFAULT_TEMPLATES = {
     "inspirations_section": INSPIRATIONS_SECTION_TEMPLATE,
     "inspiration_program": INSPIRATION_PROGRAM_TEMPLATE,
     "evaluation": EVALUATION_TEMPLATE,
+    # Discovery mode templates
+    "discovery_system": DISCOVERY_SYSTEM_TEMPLATE,
+    "discovery_diff_user": DISCOVERY_DIFF_USER_TEMPLATE,
+    "discovery_full_rewrite_user": DISCOVERY_FULL_REWRITE_TEMPLATE,
 }
 
 

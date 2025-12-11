@@ -167,7 +167,7 @@ def _run_iteration_worker(
         # Best programs only (for previous attempts section, focused on top performers)
         best_programs_only = island_programs[: _worker_config.prompt.num_top_programs]
 
-        # Build prompt
+        # Build prompt (with discovery mode support)
         prompt = _worker_prompt_sampler.build_prompt(
             current_program=parent.code,
             parent_program=parent.code,
@@ -180,6 +180,8 @@ def _run_iteration_worker(
             diff_based_evolution=_worker_config.diff_based_evolution,
             program_artifacts=parent_artifacts,
             feature_dimensions=db_snapshot.get("feature_dimensions", []),
+            problem_context=db_snapshot.get("problem_context"),
+            discovery_mode=db_snapshot.get("discovery_mode", False),
         )
 
         iteration_start = time.time()
@@ -380,6 +382,10 @@ class ProcessParallelController:
         logger.info("Graceful shutdown requested...")
         self.shutdown_event.set()
 
+    def set_problem_context(self, problem_context: str) -> None:
+        """Set the current problem context for discovery mode"""
+        self._problem_context = problem_context
+
     def _create_database_snapshot(self) -> Dict[str, Any]:
         """Create a serializable snapshot of the database state"""
         # Only include necessary data for workers
@@ -389,6 +395,9 @@ class ProcessParallelController:
             "current_island": self.database.current_island,
             "feature_dimensions": self.database.config.feature_dimensions,
             "artifacts": {},  # Will be populated selectively
+            # Discovery mode context
+            "problem_context": getattr(self, '_problem_context', None),
+            "discovery_mode": self.config.discovery.enabled if hasattr(self.config, 'discovery') else False,
         }
 
         # Include artifacts for programs that might be selected
@@ -411,8 +420,18 @@ class ProcessParallelController:
         max_iterations: int,
         target_score: Optional[float] = None,
         checkpoint_callback=None,
+        program_callback=None,
     ):
-        """Run evolution with process-based parallelism"""
+        """Run evolution with process-based parallelism
+
+        Args:
+            start_iteration: Starting iteration number
+            max_iterations: Maximum number of iterations to run
+            target_score: Optional target score to stop at
+            checkpoint_callback: Callback for checkpointing
+            program_callback: Optional async callback called for each new program
+                              Signature: async def callback(program: Program) -> None
+        """
         if not self.executor:
             raise RuntimeError("Process pool not started")
 
@@ -502,6 +521,13 @@ class ProcessParallelController:
                     # Store artifacts
                     if result.artifacts:
                         self.database.store_artifacts(child_program.id, result.artifacts)
+
+                    # Call program callback if provided (used by Discovery Engine)
+                    if program_callback is not None:
+                        try:
+                            await program_callback(child_program)
+                        except Exception as e:
+                            logger.warning(f"Program callback failed: {e}")
 
                     # Log evolution trace
                     if self.evolution_tracer:

@@ -57,6 +57,39 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--secondary-model", help="Secondary LLM model name", default=None)
 
+    # Discovery Mode arguments
+    parser.add_argument(
+        "--discovery",
+        action="store_true",
+        help="Enable Discovery Mode for scientific discovery",
+    )
+
+    parser.add_argument(
+        "--problem-description",
+        help="Genesis problem description for Discovery Mode",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--evolve-after",
+        type=int,
+        help="Evolve problem after N solutions (default: 5)",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--no-skeptic",
+        action="store_true",
+        help="Disable adversarial skeptic testing",
+    )
+
+    parser.add_argument(
+        "--surprise-threshold",
+        type=float,
+        help="Surprise score threshold for curiosity sampling (default: 0.2)",
+        default=None,
+    )
+
     return parser.parse_args()
 
 
@@ -102,6 +135,28 @@ async def main_async() -> int:
             print(f"Applied CLI model overrides - active models:")
             for i, model in enumerate(config.llm.models):
                 print(f"  Model {i+1}: {model.name} (weight: {model.weight})")
+
+    # Apply discovery mode CLI overrides
+    if args.discovery:
+        config.discovery.enabled = True
+        print("Discovery Mode enabled")
+
+    if args.problem_description:
+        config.discovery.problem_description = args.problem_description
+        config.discovery.enabled = True
+        print(f"Genesis problem: {args.problem_description}")
+
+    if args.evolve_after is not None:
+        config.discovery.evolve_problem_after_solutions = args.evolve_after
+        print(f"Problem evolves after {args.evolve_after} solutions")
+
+    if args.no_skeptic:
+        config.discovery.skeptic_enabled = False
+        print("Adversarial skeptic disabled")
+
+    if args.surprise_threshold is not None:
+        config.discovery.surprise_bonus_threshold = args.surprise_threshold
+        print(f"Surprise threshold: {args.surprise_threshold}")
 
     # Initialize OpenEvolve
     try:

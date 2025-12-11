@@ -339,6 +339,66 @@ class EvolutionTraceConfig:
 
 
 @dataclass
+class SkepticConfig:
+    """Configuration for adversarial skeptic in discovery mode"""
+
+    # Attack configuration
+    num_attack_rounds: int = 3  # Number of adversarial rounds per hypothesis
+    attack_timeout: float = 30.0  # Timeout per attack in seconds
+
+    # Attack type probabilities
+    edge_case_prob: float = 0.4  # Edge case inputs (empty, null, huge)
+    type_confusion_prob: float = 0.3  # Wrong types, mixed types
+    overflow_prob: float = 0.2  # Numerical overflow/underflow
+    malformed_prob: float = 0.1  # Malformed/corrupted inputs
+
+    # Execution settings
+    use_sandbox: bool = True  # Use sandboxed execution
+    max_memory_mb: int = 512  # Memory limit for execution
+    max_output_size: int = 10000  # Max output characters to capture
+
+    # Static analysis settings
+    static_analysis_enabled: bool = True  # Check for dangerous patterns (eval, exec, etc.)
+
+    # Reproduction settings
+    enable_blind_reproduction: bool = False  # Whether to use blind reproduction test
+
+
+@dataclass
+class DiscoveryConfig:
+    """Configuration for Discovery Mode - Open-Ended Scientific Discovery"""
+
+    # Enable discovery mode
+    enabled: bool = False
+
+    # Problem description (required if enabled)
+    problem_description: str = ""
+
+    # Problem evolution settings
+    problem_evolution_enabled: bool = True
+    evolve_problem_after_solutions: int = 5  # Evolve problem after N successful solutions
+
+    # Adversarial skeptic settings
+    skeptic_enabled: bool = True
+    skeptic: SkepticConfig = field(default_factory=SkepticConfig)
+
+    # Epistemic archive settings
+    surprise_tracking_enabled: bool = True
+    curiosity_sampling_enabled: bool = True
+    phenotype_dimensions: List[str] = field(
+        default_factory=lambda: ["complexity", "efficiency"]
+    )
+
+    # Thresholds
+    solution_threshold: float = 0.8  # Fitness threshold to consider problem "solved"
+    surprise_bonus_threshold: float = 0.2  # Surprise level to trigger bonus exploration
+
+    # Logging
+    log_discoveries: bool = True
+    discovery_log_path: Optional[str] = None  # Defaults to output_dir/discovery_log.jsonl
+
+
+@dataclass
 class Config:
     """Master configuration for OpenEvolve"""
 
@@ -357,6 +417,7 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     evaluator: EvaluatorConfig = field(default_factory=EvaluatorConfig)
     evolution_trace: EvolutionTraceConfig = field(default_factory=EvolutionTraceConfig)
+    discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
 
     # Evolution settings
     diff_based_evolution: bool = True
@@ -383,11 +444,12 @@ class Config:
         # Handle nested configurations
         config = Config()
 
+        # List of nested config keys to skip in top-level processing
+        nested_keys = ["llm", "prompt", "database", "evaluator", "evolution_trace", "discovery"]
+
         # Update top-level fields
         for key, value in config_dict.items():
-            if key not in ["llm", "prompt", "database", "evaluator", "evolution_trace"] and hasattr(
-                config, key
-            ):
+            if key not in nested_keys and hasattr(config, key):
                 setattr(config, key, value)
 
         # Update nested configs
@@ -412,6 +474,14 @@ class Config:
             config.evaluator = EvaluatorConfig(**config_dict["evaluator"])
         if "evolution_trace" in config_dict:
             config.evolution_trace = EvolutionTraceConfig(**config_dict["evolution_trace"])
+
+        # Handle discovery config
+        if "discovery" in config_dict:
+            discovery_dict = config_dict["discovery"].copy()
+            # Handle nested skeptic config
+            if "skeptic" in discovery_dict:
+                discovery_dict["skeptic"] = SkepticConfig(**discovery_dict["skeptic"])
+            config.discovery = DiscoveryConfig(**discovery_dict)
 
         return config
 

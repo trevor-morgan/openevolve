@@ -21,6 +21,15 @@ from openevolve.prompt.sampler import PromptSampler
 from openevolve.utils.code_utils import extract_code_language
 from openevolve.utils.format_utils import format_improvement_safe, format_metrics_safe
 
+# Discovery mode imports (optional)
+try:
+    from openevolve.discovery.engine import DiscoveryEngine
+    from openevolve.discovery.engine import DiscoveryConfig as DiscoveryEngineConfig
+    from openevolve.discovery.skeptic import SkepticConfig as SkepticEngineConfig
+    DISCOVERY_AVAILABLE = True
+except ImportError:
+    DISCOVERY_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -184,6 +193,65 @@ class OpenEvolve:
         # Initialize improved parallel processing components
         self.parallel_controller = None
 
+        # Initialize Discovery Engine if enabled
+        self.discovery_engine = None
+        if self.config.discovery.enabled:
+            self._init_discovery_engine()
+
+    def _init_discovery_engine(self) -> None:
+        """Initialize the Discovery Engine for open-ended scientific discovery"""
+        if not DISCOVERY_AVAILABLE:
+            logger.warning(
+                "Discovery mode enabled but discovery module not available. "
+                "Make sure openevolve.discovery is properly installed."
+            )
+            return
+
+        logger.info("Initializing Discovery Engine for open-ended discovery mode")
+
+        # Convert config to discovery engine config
+        discovery_config = DiscoveryEngineConfig(
+            problem_evolution_enabled=self.config.discovery.problem_evolution_enabled,
+            evolve_problem_after_solutions=self.config.discovery.evolve_problem_after_solutions,
+            skeptic_enabled=self.config.discovery.skeptic_enabled,
+            skeptic_config=SkepticEngineConfig(
+                num_attack_rounds=self.config.discovery.skeptic.num_attack_rounds,
+                attack_timeout=self.config.discovery.skeptic.attack_timeout,
+                edge_case_prob=self.config.discovery.skeptic.edge_case_prob,
+                type_confusion_prob=self.config.discovery.skeptic.type_confusion_prob,
+                overflow_prob=self.config.discovery.skeptic.overflow_prob,
+                malformed_prob=self.config.discovery.skeptic.malformed_prob,
+                enable_blind_reproduction=self.config.discovery.skeptic.enable_blind_reproduction,
+            ),
+            surprise_tracking_enabled=self.config.discovery.surprise_tracking_enabled,
+            curiosity_sampling_enabled=self.config.discovery.curiosity_sampling_enabled,
+            phenotype_dimensions=self.config.discovery.phenotype_dimensions,
+            solution_threshold=self.config.discovery.solution_threshold,
+            surprise_bonus_threshold=self.config.discovery.surprise_bonus_threshold,
+            log_discoveries=self.config.discovery.log_discoveries,
+            discovery_log_path=self.config.discovery.discovery_log_path or os.path.join(
+                self.output_dir, "discovery_log.jsonl"
+            ),
+        )
+
+        # Create the discovery engine
+        self.discovery_engine = DiscoveryEngine(
+            config=discovery_config,
+            openevolve=self,
+        )
+
+        # Set the genesis problem
+        problem_description = self.config.discovery.problem_description
+        if not problem_description:
+            problem_description = f"Optimize the code in {os.path.basename(self.initial_program_path)}"
+
+        self.discovery_engine.set_genesis_problem(
+            description=problem_description,
+            evaluator_path=self.evaluation_file,
+        )
+
+        logger.info(f"Discovery Engine initialized with problem: {problem_description[:100]}...")
+
     def _setup_logging(self) -> None:
         """Set up logging"""
         log_dir = self.config.log_dir or os.path.join(self.output_dir, "logs")
@@ -319,6 +387,12 @@ class OpenEvolve:
             signal.signal(signal.SIGTERM, signal_handler)
 
             self.parallel_controller.start()
+
+            # Set initial problem context for discovery mode
+            if self.discovery_engine is not None:
+                self.parallel_controller.set_problem_context(
+                    self.discovery_engine.get_current_problem_context()
+                )
 
             # When starting from iteration 0, we've already done the initial program evaluation
             # So we need to adjust the start_iteration for the actual evolution
@@ -481,6 +555,12 @@ class OpenEvolve:
                 f"{format_metrics_safe(best_program.metrics)}"
             )
 
+        # Save discovery state if enabled
+        if self.discovery_engine is not None:
+            discovery_state_path = os.path.join(checkpoint_path, "discovery_state")
+            self.discovery_engine.save_state(discovery_state_path)
+            logger.info(f"Saved discovery state to {discovery_state_path}")
+
         logger.info(f"Saved checkpoint at iteration {iteration} to {checkpoint_path}")
 
     def _load_checkpoint(self, checkpoint_path: str) -> None:
@@ -492,6 +572,13 @@ class OpenEvolve:
         self.database.load(checkpoint_path)
         logger.info(f"Checkpoint loaded successfully (iteration {self.database.last_iteration})")
 
+        # Load discovery state if enabled and exists
+        if self.discovery_engine is not None:
+            discovery_state_path = os.path.join(checkpoint_path, "discovery_state")
+            if os.path.exists(discovery_state_path):
+                self.discovery_engine.load_state(discovery_state_path)
+                logger.info(f"Loaded discovery state from {discovery_state_path}")
+
     async def _run_evolution_with_checkpoints(
         self, start_iteration: int, max_iterations: int, target_score: Optional[float]
     ) -> None:
@@ -499,9 +586,55 @@ class OpenEvolve:
         logger.info(f"Using island-based evolution with {self.config.database.num_islands} islands")
         self.database.log_island_status()
 
-        # Run the evolution process with checkpoint callback
+        # Set up program callback for Discovery Engine if enabled
+        program_callback = None
+        if self.discovery_engine is not None:
+            # Track problem generation to detect evolution
+            last_problem_generation = [self.discovery_engine.current_problem.generation if self.discovery_engine.current_problem else 0]
+
+            async def discovery_callback(program: Program) -> None:
+                """Process program through discovery engine"""
+                is_valid, metadata = await self.discovery_engine.process_program(program)
+
+                # Log discovery events
+                if not metadata.get("falsification_passed", True):
+                    logger.info(f"🔬 Program {program.id} FALSIFIED by adversarial testing")
+                elif metadata.get("is_solution"):
+                    stats = self.discovery_engine.get_statistics()
+                    logger.info(
+                        f"🎯 SOLUTION found: {program.id} "
+                        f"(problem gen: {stats['current_problem']['generation']}, "
+                        f"difficulty: {stats['current_problem']['difficulty']:.1f})"
+                    )
+
+                    # Check if problem evolved
+                    current_gen = stats['current_problem']['generation']
+                    if current_gen > last_problem_generation[0]:
+                        last_problem_generation[0] = current_gen
+                        # Update problem context for workers
+                        self.parallel_controller.set_problem_context(
+                            self.discovery_engine.get_current_problem_context()
+                        )
+                        logger.info(
+                            f"🌌 PROBLEM EVOLVED to generation {current_gen} "
+                            f"(difficulty: {stats['current_problem']['difficulty']:.1f})"
+                        )
+
+                if metadata.get("surprise_score", 0) > self.config.discovery.surprise_bonus_threshold:
+                    logger.info(
+                        f"💡 SURPRISE: {metadata['surprise_score']:.3f} "
+                        f"({'positive' if metadata.get('is_positive_surprise') else 'negative'})"
+                    )
+
+            program_callback = discovery_callback
+
+        # Run the evolution process with checkpoint callback and optional program callback
         await self.parallel_controller.run_evolution(
-            start_iteration, max_iterations, target_score, checkpoint_callback=self._save_checkpoint
+            start_iteration,
+            max_iterations,
+            target_score,
+            checkpoint_callback=self._save_checkpoint,
+            program_callback=program_callback,
         )
 
         # Check if shutdown or early stopping was triggered

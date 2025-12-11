@@ -42,6 +42,15 @@ class EvolutionTrace:
     artifacts: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
 
+    # Discovery mode fields
+    problem_id: Optional[str] = None  # Current problem being solved
+    problem_generation: Optional[int] = None  # Problem evolution generation
+    problem_difficulty: Optional[float] = None  # Current problem difficulty
+    falsification_passed: Optional[bool] = None  # Did it pass adversarial testing?
+    surprise_score: Optional[float] = None  # How surprising was this result?
+    is_solution: Optional[bool] = None  # Did this solve the current problem?
+    phenotype: Optional[Dict[str, Any]] = None  # Behavioral characteristics
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert trace to dictionary format"""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -135,6 +144,8 @@ class EvolutionTracer:
         artifacts: Optional[Dict[str, Any]] = None,
         island_id: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        # Discovery mode fields
+        discovery_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Log an evolution trace entry
@@ -148,6 +159,7 @@ class EvolutionTracer:
             artifacts: Any artifacts from evaluation
             island_id: Island ID if using island-based evolution
             metadata: Additional metadata
+            discovery_metadata: Discovery mode metadata (problem_id, phenotype, etc.)
         """
         if not self.enabled:
             return
@@ -166,6 +178,16 @@ class EvolutionTracer:
                 artifacts=artifacts,
                 metadata=metadata,
             )
+
+            # Add discovery mode fields if provided
+            if discovery_metadata:
+                trace.problem_id = discovery_metadata.get("problem_id")
+                trace.problem_generation = discovery_metadata.get("problem_generation")
+                trace.problem_difficulty = discovery_metadata.get("problem_difficulty")
+                trace.falsification_passed = discovery_metadata.get("falsification_passed")
+                trace.surprise_score = discovery_metadata.get("surprise_score")
+                trace.is_solution = discovery_metadata.get("is_solution")
+                trace.phenotype = discovery_metadata.get("phenotype")
 
             # Optionally include code
             if self.include_code:

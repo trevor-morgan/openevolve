@@ -1,0 +1,85 @@
+# Discovery Mode Configuration Example
+#
+# Discovery Mode enables scientific discovery by:
+# 1. Evolving problems when solutions are found (harder constraints, higher difficulty)
+# 2. Testing programs adversarially (not just evaluating them)
+# 3. Using surprise-based curiosity for exploration
+#
+# Usage:
+#   python openevolve-run.py program.py evaluator.py --config configs/discovery_mode_example.yaml
+#
+# Or with CLI flags:
+#   python openevolve-run.py program.py evaluator.py --discovery --problem-description "Your problem"
+
+# General settings
+max_iterations: 100
+checkpoint_interval: 10
+log_level: "INFO"
+
+# LLM configuration
+llm:
+  models:
+    - name: "gemini-2.0-flash-lite"
+      weight: 0.8
+    - name: "gemini-2.0-flash"
+      weight: 0.2
+  api_base: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  temperature: 0.8  # Slightly higher for more creative exploration
+  max_tokens: 4096
+
+# Database with smaller islands for faster iteration
+database:
+  population_size: 500
+  archive_size: 50
+  num_islands: 3
+  migration_interval: 30
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+  feature_bins: 8
+
+# Evaluator with cascade for efficiency
+evaluator:
+  timeout: 60
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.3  # Lower threshold to allow more exploration
+    - 0.6
+    - 0.8
+
+# Discovery Mode Configuration
+discovery:
+  enabled: true
+  problem_description: "Optimize the algorithm for correctness and efficiency"
+
+  # Problem Evolution
+  # Problems evolve to become harder when solutions are found
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 5  # Evolve after 5 solutions
+
+  # Adversarial Skeptic
+  # Tests programs with hostile inputs instead of trusting LLM judgment
+  skeptic_enabled: true
+  skeptic:
+    num_attack_rounds: 3
+    attack_timeout: 30.0
+    enable_blind_reproduction: false  # Enable for maximum rigor (expensive)
+    static_analysis_enabled: true
+
+  # Surprise-Based Exploration
+  # Programs that perform unexpectedly well get exploration bonuses
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.2
+
+  # Solution Detection
+  solution_threshold: 0.8
+
+  # Phenotype Dimensions for behavioral diversity
+  phenotype_dimensions:
+    - "complexity"
+    - "efficiency"
+
+  # Logging
+  log_discoveries: true
+  discovery_log_path: null  # Defaults to output_dir/discovery_log.jsonl

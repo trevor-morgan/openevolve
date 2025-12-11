@@ -496,6 +496,79 @@ def evolve_algorithm(
     )
 
 
+def run_discovery(
+    initial_program: Union[str, Path, List[str]],
+    evaluator: Union[str, Path, Callable],
+    problem_description: str,
+    config: Union[str, Path, Config, None] = None,
+    iterations: Optional[int] = None,
+    evolve_after: int = 5,
+    skeptic_enabled: bool = True,
+    output_dir: Optional[str] = None,
+    cleanup: bool = True
+) -> EvolutionResult:
+    """
+    Run OpenEvolve in Discovery Mode - for scientific discovery with evolving problems.
+
+    Discovery Mode differs from standard evolution:
+    1. The problem itself evolves as solutions are found
+    2. Programs are tested adversarially (not just evaluated)
+    3. Surprise-based curiosity drives exploration
+
+    Args:
+        initial_program: Path to program file, code string, or list of code lines
+        evaluator: Path to evaluator file or callable function
+        problem_description: Natural language description of the problem to solve
+        config: Config object, path to YAML, or None for defaults
+        iterations: Number of iterations (overrides config)
+        evolve_after: Evolve problem after N solutions (default: 5)
+        skeptic_enabled: Enable adversarial testing (default: True)
+        output_dir: Output directory (None for temp directory)
+        cleanup: If True, clean up temp files after evolution
+
+    Returns:
+        EvolutionResult with best program and metrics
+
+    Example:
+        result = run_discovery(
+            initial_program='''
+                def sort(arr):
+                    return sorted(arr)
+            ''',
+            evaluator=lambda path: {"score": test_sort(path)},
+            problem_description="Sort a list of numbers efficiently",
+            iterations=100,
+            evolve_after=5
+        )
+        print(f"Best score: {result.best_score}")
+    """
+    # Handle configuration
+    if config is None:
+        config_obj = Config()
+    elif isinstance(config, Config):
+        config_obj = config
+    else:
+        config_obj = load_config(str(config))
+
+    # Enable Discovery Mode
+    config_obj.discovery.enabled = True
+    config_obj.discovery.problem_description = problem_description
+    config_obj.discovery.skeptic_enabled = skeptic_enabled
+    config_obj.discovery.evolve_problem_after_solutions = evolve_after
+    config_obj.discovery.surprise_tracking_enabled = True
+    config_obj.discovery.curiosity_sampling_enabled = True
+    config_obj.discovery.log_discoveries = True
+
+    return run_evolution(
+        initial_program=initial_program,
+        evaluator=evaluator,
+        config=config_obj,
+        iterations=iterations,
+        output_dir=output_dir,
+        cleanup=cleanup
+    )
+
+
 def evolve_code(
     initial_code: str,
     evaluator: Callable[[str], Dict[str, Any]],

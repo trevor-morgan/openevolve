@@ -170,3 +170,42 @@ evolution_trace:
   output_path: null                   # Path for trace output (defaults to output_dir/evolution_trace.{format})
   buffer_size: 10                     # Number of traces to buffer before writing
   compress: false                     # Compress output file (jsonl only)
+
+# Discovery Mode configuration
+# Enables scientific discovery features: problem evolution, adversarial testing, and surprise-based exploration
+discovery:
+  enabled: false                      # Enable Discovery Mode
+  problem_description: null           # Genesis problem description (required if enabled)
+
+  # Problem Evolution
+  # When solutions are found, the problem evolves to become harder
+  problem_evolution_enabled: true     # Enable automatic problem evolution
+  evolve_problem_after_solutions: 5   # Evolve problem after N solutions found
+
+  # Adversarial Skeptic
+  # Actively tries to break programs with hostile inputs instead of trusting LLM-as-judge
+  skeptic_enabled: true               # Enable adversarial testing
+  skeptic:
+    num_attack_rounds: 3              # Number of adversarial attack rounds
+    attack_timeout: 30.0              # Timeout per attack in seconds
+    enable_blind_reproduction: false  # Enable blind reproduction test (expensive)
+    static_analysis_enabled: true     # Check for dangerous patterns (eval, exec, etc.)
+
+  # Surprise-Based Exploration
+  # Programs that perform unexpectedly well get exploration bonuses
+  surprise_tracking_enabled: true     # Track surprise scores
+  curiosity_sampling_enabled: true    # Sample surprising programs more often
+  surprise_bonus_threshold: 0.2       # Minimum surprise for curiosity bonus
+
+  # Solution Detection
+  solution_threshold: 0.8             # Score threshold to count as "solution"
+
+  # Phenotype Dimensions
+  # Behavioral characteristics for diversity (separate from feature_dimensions)
+  phenotype_dimensions:
+    - "complexity"                    # Code complexity metrics
+    - "efficiency"                    # Algorithmic efficiency
+
+  # Logging
+  log_discoveries: true               # Log discovery events
+  discovery_log_path: null            # Custom path for discovery logs

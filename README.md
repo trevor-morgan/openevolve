@@ -229,6 +229,44 @@ OpenEvolve implements a sophisticated **evolutionary coding pipeline** that goes
 | **Competitive Programming** | Generates multiple solution strategies |
 | **Multi-Objective Problems** | Pareto-optimal solutions across dimensions |
 
+## 🔬 Discovery Mode
+
+**Discovery Mode** transforms OpenEvolve from an optimizer into a scientific discovery engine. Instead of just optimizing solutions, it evolves the *problems themselves* and uses adversarial testing to ensure robustness.
+
+### Key Features
+
+| Feature | Standard Mode | Discovery Mode |
+|---------|---------------|----------------|
+| **Goal** | Optimize single metric | Explore diverse solutions |
+| **Problem** | Fixed | Evolves when solved |
+| **Validation** | LLM-as-judge | Adversarial falsification |
+| **Exploration** | Fitness-based | Surprise-driven curiosity |
+
+### Quick Start
+
+```bash
+# Enable Discovery Mode via CLI
+python openevolve-run.py initial.py evaluator.py \
+    --discovery \
+    --problem-description "Sort a list of numbers efficiently" \
+    --evolve-after 5
+
+# Or via config.yaml
+discovery:
+  enabled: true
+  problem_description: "Sort a list of numbers efficiently"
+  skeptic_enabled: true
+  evolve_problem_after_solutions: 5
+```
+
+### How It Works
+
+1. **Problem Evolution**: When 5 solutions are found, the problem automatically becomes harder (new constraints, higher difficulty)
+2. **Adversarial Skeptic**: Programs are tested with hostile inputs (edge cases, overflow, type confusion) instead of trusting LLM judgment
+3. **Surprise-Based Exploration**: Programs that perform unexpectedly well get exploration bonuses, driving discovery of anomalies
+
+See [Discovery Mode Architecture](docs/DISCOVERY_MODE_ARCHITECTURE.md) and the [example](examples/discovery_mode/) for details.
+
 ## 🛠 Installation & Setup
 
 ### Requirements
@@ -368,6 +406,7 @@ llm:
 | [**MLX GPU Kernels**](examples/mlx_metal_kernel_opt/) | Hardware | Apple Silicon optimization | [Benchmarks](examples/mlx_metal_kernel_opt/README.md) |
 | [**Rust Adaptive Sort**](examples/rust_adaptive_sort/) | Algorithms | Data-aware sorting | [Code Evolution](examples/rust_adaptive_sort/) |
 | [**Symbolic Regression**](examples/symbolic_regression/) | Science | Automated equation discovery | [LLM-SRBench](examples/symbolic_regression/) |
+| [**Discovery Mode**](examples/discovery_mode/) | Scientific Discovery | Problem evolution + adversarial testing | [Architecture](docs/DISCOVERY_MODE_ARCHITECTURE.md) |
 | [**Web Scraper + OptiLLM**](examples/web_scraper_optillm/) | AI Integration | Test-time compute optimization | [Smart Scraping](examples/web_scraper_optillm/) |
 
 </div>
