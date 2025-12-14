@@ -142,12 +142,30 @@ class OpenAILLM(LLMInterface):
 
         # Attempt the API call with retries
         retries = kwargs.get("retries", self.retries)
+        try:
+            retries = int(retries) if retries is not None else 0
+        except (TypeError, ValueError):
+            retries = 0
+
         retry_delay = kwargs.get("retry_delay", self.retry_delay)
+        try:
+            retry_delay = float(retry_delay) if retry_delay is not None else 0.0
+        except (TypeError, ValueError):
+            retry_delay = 0.0
+
         timeout = kwargs.get("timeout", self.timeout)
 
         for attempt in range(retries + 1):
             try:
                 response = await asyncio.wait_for(self._call_api(params), timeout=timeout)
+                if response is None:
+                    raise ValueError(f"Empty response (None) from model {self.model}")
+                if not isinstance(response, str):
+                    raise ValueError(
+                        f"Non-text response ({type(response).__name__}) from model {self.model}"
+                    )
+                if not response.strip():
+                    raise ValueError(f"Empty response (blank) from model {self.model}")
                 return response
             except asyncio.TimeoutError:
                 if attempt < retries:
