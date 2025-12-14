@@ -929,7 +929,7 @@ We welcome contributions! Here's how to get started:
 1. 🍴 **Fork** the repository
 2. 🌿 **Create** your feature branch: `git checkout -b feat-amazing-feature`
 3. ✨ **Add** your changes and tests
-4. ✅ **Test** everything: `python -m unittest discover tests`
+4. ✅ **Test** everything: `pytest tests -v --tb=short --ignore tests/integration`
 5. 📝 **Commit** with a clear message
 6. 🚀 **Push** and create a Pull Request
 

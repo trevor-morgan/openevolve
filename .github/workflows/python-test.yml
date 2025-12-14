@@ -32,7 +32,7 @@ jobs:
           OPENAI_API_KEY: test  # Mock API key for unit tests
         run: |
           # Run unit tests (all tests except integration/)
-          python -m unittest discover -s tests -p "test_*.py" -v
+          pytest tests -v --tb=short --ignore tests/integration
 
   integration-tests:
     needs: unit-tests  # Only run if unit tests pass

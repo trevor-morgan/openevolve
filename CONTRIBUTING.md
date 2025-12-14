@@ -12,7 +12,7 @@ Thank you for your interest in contributing to OpenEvolve! This document provide
    # Unit tests don't require a real API key, but the environment variable must be set
    export OPENAI_API_KEY=test-key-for-unit-tests
    ```
-5. Run the tests to ensure everything is working: `python -m unittest discover tests`
+5. Run the tests to ensure everything is working: `pytest tests -v --tb=short --ignore tests/integration`
 
 **Note**: The unit tests do not make actual API calls to OpenAI or any LLM provider. However, the `OPENAI_API_KEY` environment variable must be set to any non-empty value for the tests to run. You can use a placeholder value like `test-key-for-unit-tests`.
 
@@ -48,7 +48,7 @@ When developing features that interact with LLMs:
 4. Run the tests to make sure everything passes:
    ```bash
    export OPENAI_API_KEY=test-key-for-unit-tests
-   python -m unittest discover tests
+   pytest tests -v --tb=short --ignore tests/integration
    ```
 5. Commit your changes: `git commit -m "Add your descriptive commit message"`
 6. Push to your fork: `git push origin feature/your-feature-name`

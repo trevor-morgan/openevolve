@@ -13,6 +13,7 @@ help:
 	@echo "  venv             - Create a virtual environment"
 	@echo "  install          - Install Python dependencies"
 	@echo "  install-dev      - Install development dependencies including optillm"
+	@echo "  install-test     - Install test dependencies (pytest, etc.)"
 	@echo "  lint             - Run Black code formatting"
 	@echo "  test             - Run unit tests only"
 	@echo "  test-unit        - Run unit tests only (same as test)"
@@ -23,7 +24,7 @@ help:
 	@echo "  visualizer       - Run the visualization script"
 
 .PHONY: all
-all: install test
+all: test
 
 # Create and activate the virtual environment
 .PHONY: venv
@@ -35,11 +36,16 @@ venv:
 install: venv
 	$(PIP) install -e .
 
+# Install test dependencies (pytest, etc.)
+.PHONY: install-test
+install-test: venv
+	$(PIP) install -e ".[dev]"
+
 # Install development dependencies including optillm for integration tests
 .PHONY: install-dev
 install-dev: venv
-	$(PIP) install -e .
-	$(PIP) install pytest optillm
+	$(PIP) install -e ".[dev]"
+	$(PIP) install optillm
 
 # Run Black code formatting
 .PHONY: lint
@@ -48,8 +54,8 @@ lint: venv
 
 # Run unit tests only (fast, no LLM required)
 .PHONY: test
-test: venv
-	$(PYTHON) -m unittest discover -s tests -p "test_*.py"
+test: install-test
+	$(PYTHON) -m pytest tests -v --tb=short --ignore tests/integration
 
 # Alias for test
 .PHONY: test-unit

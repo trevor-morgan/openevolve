@@ -20,7 +20,7 @@ make install
 ### Running Tests
 ```bash
 # Run all tests
-python -m unittest discover tests
+pytest tests -v --tb=short
 
 # Or use Makefile
 make test
