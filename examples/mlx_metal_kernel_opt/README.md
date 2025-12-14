@@ -39,7 +39,7 @@ Each evolved kernel undergoes comprehensive evaluation:
 1. **Correctness Validation**: Numerical accuracy verification against MLX baseline
 2. **Performance Benchmarking**: 20 diverse inference scenarios covering:
    - Short context (16-64 tokens)
-   - Long context (512-2048 tokens) 
+   - Long context (512-2048 tokens)
    - Code generation
    - Sustained dialogue
    - Technical documentation
@@ -108,8 +108,8 @@ for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
 #### 3.1.3 Memory Access Optimization
 ```metal
 // Pre-computed base indices for coalesced access
-const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) + 
-                    head_idx * (SEQ_LEN * HEAD_DIM) + 
+const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) +
+                    head_idx * (SEQ_LEN * HEAD_DIM) +
                     query_pos * HEAD_DIM;
 const uint kv_head_idx = head_idx / HEADS_PER_KV;  // Direct 5:1 mapping
 ```

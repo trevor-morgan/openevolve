@@ -91,6 +91,25 @@ python openevolve-run.py examples/function_minimization/initial_program.py \
   --iterations 50
 ```
 
+### Prompt-Based Bootstrapping
+
+Create a new, discovery-enabled project skeleton from a short prompt:
+
+```bash
+python openevolve-run.py --init-from-prompt "Build a fast, correct sorting function" --init-dir ./my_sort_project
+```
+
+This writes `initial_program.py`, `evaluator.py`, `test_cases.json`, and `config.yaml` into the new directory.
+
+### Hot-Reload Timeouts
+
+Run with `--hot-reload` to apply changes to `evaluator.timeout` and `discovery.skeptic.attack_timeout` from your `--config`
+file while the run is active:
+
+```bash
+python openevolve-run.py path/to/initial_program.py path/to/evaluator.py --config path/to/config.yaml --hot-reload
+```
+
 **Note:** The example config uses Gemini by default, but you can use any OpenAI-compatible provider by modifying the `config.yaml`. See the [configs](configs/) for full configuration options.
 
 ### **Library Usage**
@@ -116,7 +135,7 @@ def bubble_sort(arr):
     for i in range(len(arr)):
         for j in range(len(arr)-1):
             if arr[j] > arr[j+1]:
-                arr[j], arr[j+1] = arr[j+1], arr[j] 
+                arr[j], arr[j+1] = arr[j+1], arr[j]
     return arr
 
 result = evolve_function(
@@ -219,6 +238,15 @@ OpenEvolve implements a sophisticated **evolutionary coding pipeline** that goes
 
 </details>
 
+<details>
+<summary><b>Adaptive Prompting & Selection</b></summary>
+
+- **Meta‑prompting**: Optional multi‑armed bandit system that learns which prompt strategies improve fitness. Works in both single‑process and process‑parallel runs and is checkpointed automatically.
+- **RL‑based parent selection**: Optional contextual bandit that adapts exploration/exploitation per island. Also learns online in process‑parallel mode.
+- **Lightweight worker snapshots**: Process‑parallel evolution now ships only the parent, curated top + diverse context, inspirations, and parent artifacts to workers (not the full database), improving scalability.
+
+</details>
+
 ## Perfect For
 
 | **Use Case** | **Why OpenEvolve Excels** |
@@ -270,7 +298,7 @@ See [Discovery Mode Architecture](docs/DISCOVERY_MODE_ARCHITECTURE.md) and the [
 ## 🛠 Installation & Setup
 
 ### Requirements
-- **Python**: 3.10+ 
+- **Python**: 3.10+
 - **LLM Access**: Any OpenAI-compatible API
 - **Optional**: Docker for containerized runs
 
@@ -434,16 +462,16 @@ def minimize_function(func, bounds, max_evals=1000):
 def minimize_function(func, bounds, max_evals=1000):
     x = random_point_in_bounds(bounds)
     temp = adaptive_initial_temperature(func, bounds)
-    
+
     for i in range(max_evals):
         neighbor = generate_neighbor(x, temp, bounds)
         delta = func(neighbor) - func(x)
-        
+
         if delta < 0 or random.random() < exp(-delta/temp):
             x = neighbor
-            
+
         temp *= adaptive_cooling_rate(i, max_evals)  # Dynamic cooling
-    
+
     return x, func(x)
 ```
 
@@ -513,11 +541,24 @@ prompt:
   num_top_programs: 3         # Best performers
   num_diverse_programs: 2     # Creative exploration
   include_artifacts: true     # Execution feedback
-  
+
   # Custom templates
   template_dir: "custom_prompts/"
   use_template_stochasticity: true  # Randomized prompts
 ```
+
+To enable the adaptive systems described above:
+
+```yaml
+prompt:
+  meta_prompting:
+    enabled: true
+
+rl:
+  enabled: true
+```
+
+Both learn online during evolution (including process‑parallel runs) and their state is saved in checkpoints.
 
 <details>
 <summary><b>🎯 Feature Engineering</b></summary>
@@ -526,12 +567,12 @@ prompt:
 
 ```yaml
 database:
-  feature_dimensions: 
+  feature_dimensions:
     - "complexity"      # Built-in: code length
     - "diversity"       # Built-in: structural diversity
     - "performance"     # Custom: from your evaluator
     - "memory_usage"    # Custom: from your evaluator
-    
+
   feature_bins:
     complexity: 10      # 10 complexity levels
     performance: 20     # 20 performance buckets

@@ -16,7 +16,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -34,6 +34,7 @@ class Phenotype:
     Unlike simple metrics (accuracy, speed), phenotypes describe
     HOW a solution behaves - its approach, trade-offs, and characteristics.
     """
+
     # Core behavioral dimensions
     complexity: int = 0  # AST complexity (structural)
     efficiency: int = 0  # Runtime efficiency (behavioral)
@@ -54,19 +55,25 @@ class Phenotype:
 
     # Ontology tracking - for Heisenberg Engine
     ontology_generation: int = 0  # Which ontology generation this was evaluated under
-    extracted_variables: Dict[str, Any] = field(default_factory=dict)  # Values of ontology variables
+    extracted_variables: dict[str, Any] = field(
+        default_factory=dict
+    )  # Values of ontology variables
 
-    def to_grid_coords(self, num_bins: int = 10) -> Tuple[int, int]:
+    def to_grid_coords(self, num_bins: int = 10) -> tuple[int, int]:
         """Convert phenotype to 2D grid coordinates for MAP-Elites"""
         x = min(self.complexity, num_bins - 1)
         y = min(self.efficiency, num_bins - 1)
         return (x, y)
 
-    def to_nd_coords(self, dimensions: List[str], num_bins: int = 10) -> Tuple[int, ...]:
+    def to_nd_coords(self, dimensions: list[str], num_bins: int = 10) -> tuple[int, ...]:
         """Convert phenotype to N-dimensional coordinates"""
         coords = []
         for dim in dimensions:
-            value = getattr(self, dim, 0)
+            value = getattr(self, dim, None)
+            if value is None and dim.startswith("var_"):
+                value = self.extracted_variables.get(dim[len("var_") :])
+            if value is None:
+                value = 0
             if isinstance(value, bool):
                 value = 1 if value else 0
             elif isinstance(value, str):
@@ -74,7 +81,7 @@ class Phenotype:
             coords.append(min(int(value), num_bins - 1))
         return tuple(coords)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "complexity": self.complexity,
             "efficiency": self.efficiency,
@@ -93,7 +100,7 @@ class Phenotype:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Phenotype":
+    def from_dict(cls, data: dict[str, Any]) -> "Phenotype":
         """Deserialize from dictionary"""
         return cls(
             complexity=data.get("complexity", 0),
@@ -124,7 +131,7 @@ class PhenotypeExtractor:
     def __init__(self, num_bins: int = 10):
         self.num_bins = num_bins
 
-    def extract(self, code: str, metrics: Dict[str, float] = None) -> Phenotype:
+    def extract(self, code: str, metrics: dict[str, float] = None) -> Phenotype:
         """Extract phenotype from code and optional metrics"""
         metrics = metrics or {}
 
@@ -175,20 +182,20 @@ class PhenotypeExtractor:
 
             # Vectorization detection (numpy-style operations)
             if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
-                module = getattr(node, 'module', '') or ''
-                names = [alias.name for alias in getattr(node, 'names', [])]
-                if 'numpy' in module or 'np' in names or 'numpy' in names:
+                module = getattr(node, "module", "") or ""
+                names = [alias.name for alias in getattr(node, "names", [])]
+                if "numpy" in module or "np" in names or "numpy" in names:
                     phenotype.uses_vectorization = True
 
             # Memoization detection (lru_cache, cache decorators)
             if isinstance(node, ast.FunctionDef):
                 for decorator in node.decorator_list:
                     if isinstance(decorator, ast.Name):
-                        if decorator.id in ('lru_cache', 'cache', 'memoize'):
+                        if decorator.id in ("lru_cache", "cache", "memoize"):
                             phenotype.uses_memoization = True
                     elif isinstance(decorator, ast.Call):
                         if isinstance(decorator.func, ast.Name):
-                            if decorator.func.id in ('lru_cache', 'cache', 'memoize'):
+                            if decorator.func.id in ("lru_cache", "cache", "memoize"):
                                 phenotype.uses_memoization = True
 
         # Robustness analysis (error handling)
@@ -212,7 +219,6 @@ class PhenotypeExtractor:
 
             # Capture structural features
             has_class = any(isinstance(n, ast.ClassDef) for n in ast.walk(tree))
-            has_recursion = False
             has_loop = False
             has_comprehension = False
             imports = set()
@@ -225,7 +231,7 @@ class PhenotypeExtractor:
                 if isinstance(node, ast.Import):
                     imports.update(alias.name for alias in node.names)
                 if isinstance(node, ast.ImportFrom) and node.module:
-                    imports.add(node.module.split('.')[0])
+                    imports.add(node.module.split(".")[0])
 
             features.append("class" if has_class else "func")
             features.append("loop" if has_loop else "noloop")
@@ -249,6 +255,7 @@ class SurpriseMetric:
     High surprise indicates the system encountered something unexpected,
     which is exactly where scientific discoveries happen.
     """
+
     predicted_fitness: float = 0.0
     actual_fitness: float = 0.0
     surprise_score: float = 0.0
@@ -276,34 +283,36 @@ class EpistemicArchive:
     def __init__(
         self,
         database: "ProgramDatabase",
-        phenotype_dimensions: List[str] = None,
+        phenotype_dimensions: list[str] = None,
+        custom_phenotype_extractor: Any | None = None,
+        mirror_dimensions: list[str] | None = None,
         num_bins: int = 10,
     ):
         self.database = database
         self.num_bins = num_bins
         self.phenotype_dimensions = phenotype_dimensions or ["complexity", "efficiency"]
         self.phenotype_extractor = PhenotypeExtractor(num_bins)
+        self.custom_phenotype_extractor = custom_phenotype_extractor
+        self.mirror_dimensions = mirror_dimensions or []
 
         # Surprise tracking
-        self.surprise_history: List[SurpriseMetric] = []
-        self.prediction_model: Dict[str, float] = {}  # Simple prediction model
+        self.surprise_history: list[SurpriseMetric] = []
+        self.prediction_model: dict[str, float] = {}  # Simple prediction model
 
         # Cross-problem knowledge
-        self.approach_library: Dict[str, Dict[str, Any]] = {}  # signature -> approach info
+        self.approach_library: dict[str, dict[str, Any]] = {}  # signature -> approach info
 
         # Ontology tracking (for Heisenberg Engine)
         self.current_ontology_generation: int = 0
-        self._ontology_history: List[Dict[str, Any]] = []
+        self._ontology_history: list[dict[str, Any]] = []
 
-        logger.info(
-            f"Initialized EpistemicArchive with dimensions: {self.phenotype_dimensions}"
-        )
+        logger.info(f"Initialized EpistemicArchive with dimensions: {self.phenotype_dimensions}")
 
     def add_with_phenotype(
         self,
         program: "Program",
         predicted_fitness: float = None,
-    ) -> Tuple[bool, Optional[SurpriseMetric]]:
+    ) -> tuple[bool, SurpriseMetric | None]:
         """
         Add a program to the archive with phenotype extraction and surprise tracking.
 
@@ -314,8 +323,69 @@ class EpistemicArchive:
         Returns:
             Tuple of (was_added, surprise_metric)
         """
-        # Extract phenotype
+        # Extract phenotype (default structural extractor)
         phenotype = self.phenotype_extractor.extract(program.code, program.metrics)
+        phenotype.ontology_generation = self.current_ontology_generation
+
+        artifacts: dict[str, Any] | None = None
+        if getattr(self.database, "get_artifacts", None) is not None:
+            try:
+                artifacts = self.database.get_artifacts(program.id)
+            except Exception:
+                artifacts = None
+        if artifacts is None and program.metadata:
+            artifacts = program.metadata.get("artifacts")
+
+        # If ontology variable dimensions are present, try to extract numeric values from
+        # artifacts/metrics safely (no arbitrary code execution).
+        for dim in self.phenotype_dimensions:
+            if not dim.startswith("var_"):
+                continue
+            var_name = dim[len("var_") :]
+            val = None
+            try:
+                if program.metrics and var_name in program.metrics:
+                    val = program.metrics.get(var_name)
+            except Exception:
+                val = None
+            if val is None and artifacts is not None:
+                val = self._find_numeric_value(artifacts, var_name)
+            numeric = self._coerce_numeric(val)
+            if numeric is not None:
+                phenotype.extracted_variables[var_name] = numeric
+
+        # Optional task-specific phenotype augmentation/override.
+        if self.custom_phenotype_extractor is not None:
+            try:
+                extra = self.custom_phenotype_extractor(program.code, program.metrics, artifacts)
+                if isinstance(extra, Phenotype):
+                    phenotype = extra
+                elif isinstance(extra, dict):
+                    for k, v in extra.items():
+                        setattr(phenotype, k, v)
+                        if (
+                            k not in self.phenotype_dimensions
+                            and len(self.phenotype_dimensions) < 10
+                        ):
+                            self.phenotype_dimensions.append(k)
+            except Exception as e:
+                logger.debug(f"Custom phenotype extractor failed: {e}")
+
+        # Optionally mirror selected phenotype dimensions into program metrics
+        # so MAP-Elites can use them as feature dimensions.
+        if self.mirror_dimensions:
+            if program.metrics is None:
+                program.metrics = {}
+            for dim in self.mirror_dimensions:
+                if dim in program.metrics:
+                    continue
+                val = getattr(phenotype, dim, None)
+                if val is None and dim.startswith("var_"):
+                    val = phenotype.extracted_variables.get(dim[len("var_") :])
+                if isinstance(val, bool):
+                    program.metrics[dim] = 1.0 if val else 0.0
+                elif isinstance(val, (int, float)):
+                    program.metrics[dim] = float(val)
 
         # Store phenotype in program metadata
         if program.metadata is None:
@@ -350,18 +420,31 @@ class EpistemicArchive:
                 "phenotype": phenotype.to_dict(),
                 "success_count": 0,
                 "failure_count": 0,
+                "fitness_sum": 0.0,
+                "fitness_count": 0,
             }
 
         # Update approach statistics
         actual_fitness = program.metrics.get("combined_score", 0.0)
+        approach_entry = self.approach_library[phenotype.approach_signature]
+        approach_entry["fitness_sum"] = float(approach_entry.get("fitness_sum", 0.0)) + float(
+            actual_fitness
+        )
+        approach_entry["fitness_count"] = int(approach_entry.get("fitness_count", 0)) + 1
         if actual_fitness > 0.5:
-            self.approach_library[phenotype.approach_signature]["success_count"] += 1
+            approach_entry["success_count"] += 1
         else:
-            self.approach_library[phenotype.approach_signature]["failure_count"] += 1
+            approach_entry["failure_count"] += 1
 
-        # Add to underlying database (which handles MAP-Elites)
-        # The database will use its own feature dimensions
-        self.database.add(program)
+        # Add to underlying database (which handles MAP-Elites) only if not already present.
+        # In Discovery Mode integrated into OpenEvolve, programs are added by the main loop.
+        if (
+            getattr(self.database, "programs", None) is None
+            or program.id not in self.database.programs
+        ):
+            # Preserve iteration_found/last_iteration when discovery admits programs
+            iter_idx = getattr(program, "iteration_found", None)
+            self.database.add(program, iteration=iter_idx)
 
         # Check if this was a novel niche occupation
         was_novel = self._check_novelty(program, phenotype)
@@ -386,6 +469,63 @@ class EpistemicArchive:
 
         return False
 
+    @staticmethod
+    def _coerce_numeric(value: Any) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return 1.0 if value else 0.0
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        if isinstance(value, str):
+            text = value.strip()
+            try:
+                return float(text)
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def _find_numeric_value(cls, obj: Any, key: str, depth: int = 0) -> float | None:
+        """Find the first numeric value for `key` in nested dict/list structures."""
+        if depth > 6 or obj is None:
+            return None
+
+        def _norm(s: str) -> str:
+            return "".join(ch.lower() for ch in s if ch.isalnum() or ch in ("_",))
+
+        target = _norm(key)
+
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if isinstance(k, str) and _norm(k) == target:
+                    coerced = cls._coerce_numeric(v)
+                    if coerced is not None:
+                        return coerced
+                found = cls._find_numeric_value(v, key, depth=depth + 1)
+                if found is not None:
+                    return found
+            return None
+
+        if isinstance(obj, (list, tuple)):
+            for item in obj:
+                found = cls._find_numeric_value(item, key, depth=depth + 1)
+                if found is not None:
+                    return found
+            return None
+
+        if isinstance(obj, str):
+            text = obj.strip()
+            if text.startswith("{") or text.startswith("["):
+                try:
+                    parsed = json.loads(text)
+                except Exception:
+                    return None
+                return cls._find_numeric_value(parsed, key, depth=depth + 1)
+            return cls._coerce_numeric(text)
+
+        return cls._coerce_numeric(obj)
+
     def predict_fitness(self, code: str) -> float:
         """
         Predict expected fitness for code before evaluation.
@@ -398,9 +538,23 @@ class EpistemicArchive:
         # Use approach signature for prediction if we've seen it before
         if phenotype.approach_signature in self.approach_library:
             approach = self.approach_library[phenotype.approach_signature]
-            total = approach["success_count"] + approach["failure_count"]
+            count = int(approach.get("fitness_count", 0))
+            fitness_sum = float(approach.get("fitness_sum", 0.0))
+            if count > 0:
+                # Shrink mean toward a neutral prior to avoid early saturation.
+                prior_mean = 0.5
+                prior_weight = 2.0
+                mean = (fitness_sum + prior_mean * prior_weight) / (count + prior_weight)
+                return float(np.clip(mean, 0.0, 1.0))
+
+            total = approach.get("success_count", 0) + approach.get("failure_count", 0)
             if total > 0:
-                return approach["success_count"] / total
+                prior_alpha = 1.0
+                prior_beta = 1.0
+                smoothed = (approach.get("success_count", 0) + prior_alpha) / (
+                    total + prior_alpha + prior_beta
+                )
+                return float(np.clip(smoothed, 0.0, 1.0))
 
         # Default prediction based on complexity heuristic
         # Very simple or very complex code tends to be worse
@@ -408,7 +562,7 @@ class EpistemicArchive:
         complexity_penalty = abs(phenotype.complexity - optimal_complexity) / self.num_bins
         return max(0.0, 0.5 - complexity_penalty)
 
-    def get_surprise_statistics(self) -> Dict[str, Any]:
+    def get_surprise_statistics(self) -> dict[str, Any]:
         """Get statistics about surprises encountered"""
         if not self.surprise_history:
             return {"total_surprises": 0}
@@ -425,22 +579,21 @@ class EpistemicArchive:
             "high_surprise_count": sum(1 for s in surprises if s > 0.2),
         }
 
-    def get_approach_diversity(self) -> Dict[str, Any]:
+    def get_approach_diversity(self) -> dict[str, Any]:
         """Get statistics about approach diversity"""
         return {
             "unique_approaches": len(self.approach_library),
             "approaches": {
                 sig: {
-                    "success_rate": info["success_count"] / max(
-                        1, info["success_count"] + info["failure_count"]
-                    ),
+                    "success_rate": info["success_count"]
+                    / max(1, info["success_count"] + info["failure_count"]),
                     "total_uses": info["success_count"] + info["failure_count"],
                 }
                 for sig, info in self.approach_library.items()
             },
         }
 
-    def get_promising_approaches(self, min_success_rate: float = 0.6) -> List[str]:
+    def get_promising_approaches(self, min_success_rate: float = 0.6) -> list[str]:
         """Get code examples of promising approaches"""
         promising = []
         for sig, info in self.approach_library.items():
@@ -451,7 +604,7 @@ class EpistemicArchive:
                     promising.append(info["example_code"])
         return promising
 
-    def sample_for_curiosity(self, n: int = 3) -> List["Program"]:
+    def sample_for_curiosity(self, n: int = 3) -> list["Program"]:
         """
         Sample programs that maximize expected information gain.
 
@@ -460,8 +613,6 @@ class EpistemicArchive:
         2. Under-explored regions of the phenotype space
         3. Approaches we haven't tried much yet
         """
-        candidates = []
-
         # Get all programs
         all_programs = list(self.database.programs.values())
         if not all_programs:
@@ -477,15 +628,16 @@ class EpistemicArchive:
             approach_sig = phenotype.get("approach_signature", "")
             if approach_sig in self.approach_library:
                 uses = (
-                    self.approach_library[approach_sig]["success_count"] +
-                    self.approach_library[approach_sig]["failure_count"]
+                    self.approach_library[approach_sig]["success_count"]
+                    + self.approach_library[approach_sig]["failure_count"]
                 )
                 # Rare approaches are more interesting
                 score += 1.0 / max(uses, 1)
 
             # Factor 2: Associated surprise
             program_surprises = [
-                s for s in self.surprise_history
+                s
+                for s in self.surprise_history
                 if abs(s.actual_fitness - program.metrics.get("combined_score", 0)) < 0.01
             ]
             if program_surprises:
@@ -494,8 +646,9 @@ class EpistemicArchive:
             # Factor 3: Frontier programs (high in one dimension, low in another)
             complexity = phenotype.get("complexity", 0)
             efficiency = phenotype.get("efficiency", 0)
-            if (complexity > self.num_bins * 0.7 and efficiency < self.num_bins * 0.3) or \
-               (complexity < self.num_bins * 0.3 and efficiency > self.num_bins * 0.7):
+            if (complexity > self.num_bins * 0.7 and efficiency < self.num_bins * 0.3) or (
+                complexity < self.num_bins * 0.3 and efficiency > self.num_bins * 0.7
+            ):
                 score += 0.5  # Bonus for frontier programs
 
             scored.append((program, score))
@@ -507,7 +660,7 @@ class EpistemicArchive:
     def update_for_ontology(
         self,
         ontology_generation: int,
-        new_variables: List[str],
+        new_variables: list[str],
     ) -> None:
         """
         Update the archive for a new ontology generation.
@@ -536,12 +689,14 @@ class EpistemicArchive:
                     )
 
         # Track the ontology expansion event
-        self._ontology_history.append({
-            "generation": ontology_generation,
-            "new_variables": new_variables,
-            "timestamp": time.time(),
-            "phenotype_dimensions": self.phenotype_dimensions.copy(),
-        })
+        self._ontology_history.append(
+            {
+                "generation": ontology_generation,
+                "new_variables": new_variables,
+                "timestamp": time.time(),
+                "phenotype_dimensions": self.phenotype_dimensions.copy(),
+            }
+        )
 
         logger.info(
             f"Updated archive for ontology generation {ontology_generation}, "
@@ -552,7 +707,7 @@ class EpistemicArchive:
         self,
         n: int = 10,
         ontology_generation: int = None,
-    ) -> List["Program"]:
+    ) -> list["Program"]:
         """
         Get top programs that should be re-evaluated after ontology expansion.
 
@@ -576,18 +731,15 @@ class EpistemicArchive:
                 programs.append(program)
 
         # Sort by combined_score descending
-        programs.sort(
-            key=lambda p: p.metrics.get("combined_score", 0.0),
-            reverse=True
-        )
+        programs.sort(key=lambda p: p.metrics.get("combined_score", 0.0), reverse=True)
 
         return programs[:n]
 
-    def get_ontology_statistics(self) -> Dict[str, Any]:
+    def get_ontology_statistics(self) -> dict[str, Any]:
         """Get statistics about ontology evolution impact on archive"""
-        if not hasattr(self, '_ontology_history') or not self._ontology_history:
+        if not hasattr(self, "_ontology_history") or not self._ontology_history:
             return {
-                "current_ontology_generation": getattr(self, 'current_ontology_generation', 0),
+                "current_ontology_generation": getattr(self, "current_ontology_generation", 0),
                 "expansion_count": 0,
             }
 

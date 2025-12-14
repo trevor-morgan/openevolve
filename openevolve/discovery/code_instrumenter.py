@@ -13,8 +13,8 @@ Instrumentation Levels:
 import ast
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +22,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InstrumentationResult:
     """Result of code instrumentation"""
+
     instrumented_code: str
     original_code: str
     instrumentation_level: str
-    tracked_variables: List[str]
+    tracked_variables: list[str]
     injection_points: int
     success: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class TraceCollector:
@@ -136,10 +137,10 @@ __heisenberg_trace__ = __TraceCollector__()
 __heisenberg_trace__.start()
 '''
 
-    COLLECTOR_FINALIZE = '''
+    COLLECTOR_FINALIZE = """
 __heisenberg_trace__.stop()
 __heisenberg_artifacts__ = __heisenberg_trace__.get_traces()
-'''
+"""
 
 
 class CodeInstrumenter:
@@ -213,6 +214,7 @@ class CodeInstrumenter:
             # Generate instrumented code
             try:
                 import astor
+
                 instrumented_code = astor.to_source(instrumented_tree)
             except ImportError:
                 # Fall back to ast.unparse (Python 3.9+)
@@ -220,9 +222,11 @@ class CodeInstrumenter:
 
             # Add trace collector
             full_code = (
-                TraceCollector.COLLECTOR_CODE + "\n\n" +
-                instrumented_code + "\n\n" +
-                TraceCollector.COLLECTOR_FINALIZE
+                TraceCollector.COLLECTOR_CODE
+                + "\n\n"
+                + instrumented_code
+                + "\n\n"
+                + TraceCollector.COLLECTOR_FINALIZE
             )
 
             return InstrumentationResult(
@@ -277,7 +281,7 @@ class CodeInstrumenter:
 
         return block_code, block_start, block_end
 
-    def extract_traces(self, execution_output: str) -> Dict[str, Any]:
+    def extract_traces(self, execution_output: str) -> dict[str, Any]:
         """
         Extract traces from execution output.
 
@@ -291,7 +295,9 @@ class CodeInstrumenter:
         import json
 
         # Try to find JSON block
-        json_match = re.search(r'__heisenberg_artifacts__\s*=\s*(\{.*\})', execution_output, re.DOTALL)
+        json_match = re.search(
+            r"__heisenberg_artifacts__\s*=\s*(\{.*\})", execution_output, re.DOTALL
+        )
         if json_match:
             try:
                 return json.loads(json_match.group(1))
@@ -313,7 +319,7 @@ class BaseInstrumenter(ast.NodeTransformer):
     """Base class for code instrumenters"""
 
     def __init__(self):
-        self.tracked_variables: List[str] = []
+        self.tracked_variables: list[str] = []
         self.injection_count = 0
         self._loop_counter = 0
         self._branch_counter = 0
@@ -324,12 +330,12 @@ class BaseInstrumenter(ast.NodeTransformer):
 
         call = ast.Call(
             func=ast.Attribute(
-                value=ast.Name(id='__heisenberg_trace__', ctx=ast.Load()),
+                value=ast.Name(id="__heisenberg_trace__", ctx=ast.Load()),
                 attr=method,
-                ctx=ast.Load()
+                ctx=ast.Load(),
             ),
             args=[ast.Constant(value=arg) for arg in args],
-            keywords=[]
+            keywords=[],
         )
         return ast.Expr(value=call)
 
@@ -339,15 +345,12 @@ class BaseInstrumenter(ast.NodeTransformer):
 
         call = ast.Call(
             func=ast.Attribute(
-                value=ast.Name(id='__heisenberg_trace__', ctx=ast.Load()),
-                attr='log_assignment',
-                ctx=ast.Load()
+                value=ast.Name(id="__heisenberg_trace__", ctx=ast.Load()),
+                attr="log_assignment",
+                ctx=ast.Load(),
             ),
-            args=[
-                ast.Constant(value=var_name),
-                value_node
-            ],
-            keywords=[]
+            args=[ast.Constant(value=var_name), value_node],
+            keywords=[],
         )
         return ast.Expr(value=call)
 
@@ -358,7 +361,7 @@ class MinimalInstrumenter(BaseInstrumenter):
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         """Add function call logging"""
         # Add call logging at start of function
-        log_call = self._make_trace_call('log_call', node.name)
+        log_call = self._make_trace_call("log_call", node.name)
 
         # Insert at beginning of function body
         node.body.insert(0, log_call)
@@ -373,19 +376,19 @@ class StandardInstrumenter(BaseInstrumenter):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         """Add function call logging"""
-        log_call = self._make_trace_call('log_call', node.name)
+        log_call = self._make_trace_call("log_call", node.name)
         node.body.insert(0, log_call)
         self.generic_visit(node)
         return node
 
-    def visit_Assign(self, node: ast.Assign) -> List[ast.stmt]:
+    def visit_Assign(self, node: ast.Assign) -> list[ast.stmt]:
         """Log variable assignments"""
         result = [node]
 
         for target in node.targets:
             if isinstance(target, ast.Name):
                 var_name = target.id
-                if not var_name.startswith('_'):
+                if not var_name.startswith("_"):
                     self.tracked_variables.append(var_name)
                     # Create a new Name node to reference the assigned value
                     value_ref = ast.Name(id=var_name, ctx=ast.Load())
@@ -400,7 +403,7 @@ class StandardInstrumenter(BaseInstrumenter):
         self._loop_counter += 1
 
         # Add iteration counter at start of loop body
-        log_iter = self._make_trace_call('log_loop_iteration', loop_id)
+        log_iter = self._make_trace_call("log_loop_iteration", loop_id)
         node.body.insert(0, log_iter)
 
         self.generic_visit(node)
@@ -412,7 +415,7 @@ class StandardInstrumenter(BaseInstrumenter):
         self._loop_counter += 1
 
         # Add iteration counter at start of loop body
-        log_iter = self._make_trace_call('log_loop_iteration', loop_id)
+        log_iter = self._make_trace_call("log_loop_iteration", loop_id)
         node.body.insert(0, log_iter)
 
         self.generic_visit(node)
@@ -428,12 +431,12 @@ class ComprehensiveInstrumenter(StandardInstrumenter):
         self._branch_counter += 1
 
         # Log branch taken at start of if body
-        log_taken = self._make_trace_call('log_branch', branch_id, True)
+        log_taken = self._make_trace_call("log_branch", branch_id, True)
         node.body.insert(0, log_taken)
 
         # Log branch not taken at start of else body (if exists)
         if node.orelse:
-            log_not_taken = self._make_trace_call('log_branch', branch_id, False)
+            log_not_taken = self._make_trace_call("log_branch", branch_id, False)
             if isinstance(node.orelse[0], ast.If):
                 # elif - don't modify
                 pass
@@ -449,7 +452,7 @@ class ComprehensiveInstrumenter(StandardInstrumenter):
         # For now, just pass through
         return node
 
-    def visit_Return(self, node: ast.Return) -> List[ast.stmt]:
+    def visit_Return(self, node: ast.Return) -> list[ast.stmt]:
         """Log return values"""
         if node.value is not None:
             # Create a temp variable to hold return value
@@ -457,27 +460,29 @@ class ComprehensiveInstrumenter(StandardInstrumenter):
 
             # Assign to temp
             temp_assign = ast.Assign(
-                targets=[ast.Name(id=temp_name, ctx=ast.Store())],
-                value=node.value
+                targets=[ast.Name(id=temp_name, ctx=ast.Store())], value=node.value
             )
-
-            # Log intermediate value
-            log_stmt = self._make_trace_call('log_intermediate', 'return_value', temp_name)
 
             # Return the temp
             new_return = ast.Return(value=ast.Name(id=temp_name, ctx=ast.Load()))
 
-            return [temp_assign, ast.Expr(value=ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id='__heisenberg_trace__', ctx=ast.Load()),
-                    attr='log_intermediate',
-                    ctx=ast.Load()
+            return [
+                temp_assign,
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id="__heisenberg_trace__", ctx=ast.Load()),
+                            attr="log_intermediate",
+                            ctx=ast.Load(),
+                        ),
+                        args=[
+                            ast.Constant(value="return_value"),
+                            ast.Name(id=temp_name, ctx=ast.Load()),
+                        ],
+                        keywords=[],
+                    )
                 ),
-                args=[
-                    ast.Constant(value='return_value'),
-                    ast.Name(id=temp_name, ctx=ast.Load())
-                ],
-                keywords=[]
-            )), new_return]
+                new_return,
+            ]
 
         return [node]

@@ -2,10 +2,10 @@
 Utility functions for formatting output
 """
 
-from typing import Any, Dict
+from typing import Any
 
 
-def format_metrics_safe(metrics: Dict[str, Any]) -> str:
+def format_metrics_safe(metrics: dict[str, Any]) -> str:
     """
     Safely format metrics dictionary for logging, handling both numeric and string values.
 
@@ -35,7 +35,7 @@ def format_metrics_safe(metrics: Dict[str, Any]) -> str:
     return ", ".join(formatted_parts)
 
 
-def format_improvement_safe(parent_metrics: Dict[str, Any], child_metrics: Dict[str, Any]) -> str:
+def format_improvement_safe(parent_metrics: dict[str, Any], child_metrics: dict[str, Any]) -> str:
     """
     Safely format improvement metrics for logging.
 

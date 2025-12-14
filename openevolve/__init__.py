@@ -3,26 +3,27 @@ OpenEvolve: An open-source implementation of AlphaEvolve
 """
 
 from openevolve._version import __version__
-from openevolve.controller import OpenEvolve
 from openevolve.api import (
-    run_evolution,
-    run_discovery,
-    evolve_function,
+    EvolutionResult,
     evolve_algorithm,
     evolve_code,
-    EvolutionResult
+    evolve_function,
+    run_discovery,
+    run_evolution,
 )
 from openevolve.config import Config, DiscoveryConfig, SkepticConfig
+from openevolve.controller import OpenEvolve
 
 # Discovery Mode imports (optional - may not be installed)
 try:
     from openevolve.discovery import (
-        DiscoveryEngine,
-        ProblemSpace,
-        ProblemEvolver,
         AdversarialSkeptic,
+        DiscoveryEngine,
         EpistemicArchive,
+        ProblemEvolver,
+        ProblemSpace,
     )
+
     DISCOVERY_AVAILABLE = True
 except ImportError:
     DISCOVERY_AVAILABLE = False

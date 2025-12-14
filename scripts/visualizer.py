@@ -1,11 +1,11 @@
-import os
-import json
 import glob
+import json
 import logging
-import shutil
+import os
 import re as _re
-from flask import Flask, render_template, render_template_string, jsonify
+import shutil
 
+from flask import Flask, jsonify, render_template
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__, template_folder="templates")
@@ -142,7 +142,7 @@ def run_static_export(args):
     # Load index.html template
     templates_dir = os.path.join(os.path.dirname(__file__), "templates")
     template_path = os.path.join(templates_dir, "index.html")
-    with open(template_path, "r", encoding="utf-8") as f:
+    with open(template_path, encoding="utf-8") as f:
         html = f.read()
 
     # Insert static json data into the HTML

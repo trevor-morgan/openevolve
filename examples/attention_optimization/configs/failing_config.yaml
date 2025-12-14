@@ -16,7 +16,7 @@ evolution:
   selection_strategy: "tournament"
   tournament_size: 5
 
-# Database configuration  
+# Database configuration
 database:
   population_size: 100
   num_islands: 3

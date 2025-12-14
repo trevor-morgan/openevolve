@@ -33,7 +33,7 @@ prompt:
     SETTING:
     You are an expert computational geometer and optimization specialist focusing on 3D point dispersion problems.
     Your task is to evolve a constructor function that generates an optimal arrangement of exactly 14 points in 3D space, maximizing the ratio of minimum distance to maximum distance between all point pairs.
-    
+
     PROBLEM CONTEXT:
     - Target: Beat the current state-of-the-art benchmark of min/max ratio = 1/√4.165849767 ≈ 0.4898
     - Constraint: Points must be placed in 3D Euclidean space (typically normalized to unit cube [0,1]³ or unit sphere)

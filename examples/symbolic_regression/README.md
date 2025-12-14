@@ -116,7 +116,7 @@ def func(x, params):
 
     result = x[:, 0] * params[0] + x[:, 1] * params[1] + x[:, 2] * params[2]
     return result
-    
+
 # EVOLVE-BLOCK-END
 
 # This part remains fixed (not evolved)
@@ -188,7 +188,7 @@ def func(x, params):
     return restoring + forcing + interaction + bias
 ```
 
-The ground truth for this PO10 task is represented by the equation: 
+The ground truth for this PO10 task is represented by the equation:
 
 $F_0sin(t)−ω_0^2(γt+1)x(t)−ω_0^2x(t)^3−ω_0^2x(t).$
 
@@ -255,4 +255,3 @@ Current results for OpenEvolve are only for two subsets of LSR-Synth. We will up
 ## 🤝 Contribution
 
 This OpenEvolve example for LLM-SRBench was implemented by [**Haowei Lin**](https://linhaowei1.github.io/) from Peking University. If you encounter any issues or have questions, please feel free to reach out to Haowei via email (linhaowei@pku.edu.cn) for discussion.
-

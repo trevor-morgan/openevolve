@@ -1,0 +1,61 @@
+# OpenEvolve configuration for Trading Alpha discovery
+
+max_iterations: 100
+checkpoint_interval: 20
+
+# LLM Configuration
+llm:
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  # Best models from CLIProxyAPI (no prefix needed)
+  # Claude: claude-sonnet-4-20250514, claude-opus-4-5-20251101
+  # GPT: gpt-5.1-codex-max-xhigh, gpt-5.1-codex
+  # Gemini: gemini-2.5-flash, gemini-3-pro-preview
+  primary_model: "claude-opus-4-5-20251101"
+  primary_model_weight: 0.6
+
+  secondary_model: "gemini-3-pro-preview"
+  secondary_model_weight: 0.4
+
+  temperature: 0.9
+  top_p: null  # Claude doesn't allow both temperature and top_p
+  max_tokens: 4096
+  timeout: 120
+
+# Prompt Configuration
+prompt:
+  system_message: |
+    You are an expert quantitative researcher optimizing trading strategies.
+
+    Key principles for alpha discovery:
+    1. Stationarity: Use fractional differentiation (d ~ 0.3-0.4)
+    2. Information decay: Recent signals matter more
+    3. Risk management: Control position sizing and drawdown
+    4. Regime awareness: Adapt to market conditions
+
+    AFML techniques to consider:
+    - Triple barrier labeling for better training targets
+    - Bet sizing based on confidence (Kelly criterion)
+    - Purged cross-validation for proper backtesting
+    - Meta-labeling for signal quality
+
+    Available features: momentum_5, momentum_20, volatility_10, rsi_14, ma_cross
+
+# Database Configuration
+database:
+  population_size: 40
+  archive_size: 20
+  num_islands: 4
+  elite_selection_ratio: 0.2
+  exploitation_ratio: 0.6
+
+# Evaluator Configuration
+evaluator:
+  timeout: 60
+  cascade_thresholds: [0.2, 0.5]
+  parallel_evaluations: 2
+
+# Evolution settings
+diff_based_evolution: true
+max_code_length: 15000

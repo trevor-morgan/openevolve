@@ -7,9 +7,6 @@ import json
 import os
 import subprocess
 import tempfile
-import time
-from pathlib import Path
-from typing import Dict, Any
 
 import numpy as np
 
@@ -103,7 +100,7 @@ write(jsonlite::toJSON(metrics, auto_unbox=TRUE), "results.json")
                     )
                     continue
 
-                with open(results_path, "r") as f:
+                with open(results_path) as f:
                     metrics = json.load(f)
 
                 # Calculate case score (emphasize robustness for cases with outliers)

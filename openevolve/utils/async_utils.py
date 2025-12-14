@@ -5,8 +5,8 @@ Async utilities for OpenEvolve
 import asyncio
 import functools
 import logging
-import time
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ async def run_sync_with_timeout(
 
 async def gather_with_concurrency(
     n: int, *tasks: asyncio.Future, return_exceptions: bool = False
-) -> List[Any]:
+) -> list[Any]:
     """
     Run tasks with a concurrency limit
 
@@ -117,7 +117,7 @@ async def retry_async(
     retries: int = 3,
     delay: float = 1.0,
     backoff: float = 2.0,
-    exceptions: Union[Exception, tuple] = Exception,
+    exceptions: Exception | tuple = Exception,
     **kwargs: Any,
 ) -> Any:
     """
@@ -148,14 +148,14 @@ async def retry_async(
             last_exception = e
             if i < retries:
                 logger.warning(
-                    f"Retry {i+1}/{retries} failed with {type(e).__name__}: {str(e)}. "
+                    f"Retry {i + 1}/{retries} failed with {type(e).__name__}: {e!s}. "
                     f"Retrying in {current_delay:.2f}s..."
                 )
                 await asyncio.sleep(current_delay)
                 current_delay *= backoff
             else:
                 logger.error(
-                    f"All {retries+1} attempts failed. Last error: {type(e).__name__}: {str(e)}"
+                    f"All {retries + 1} attempts failed. Last error: {type(e).__name__}: {e!s}"
                 )
 
     if last_exception:
@@ -171,8 +171,8 @@ class TaskPool:
 
     def __init__(self, max_concurrency: int = 10):
         self.max_concurrency = max_concurrency
-        self._semaphore: Optional[asyncio.Semaphore] = None
-        self.tasks: List[asyncio.Task] = []
+        self._semaphore: asyncio.Semaphore | None = None
+        self.tasks: list[asyncio.Task] = []
 
     @property
     def semaphore(self) -> asyncio.Semaphore:

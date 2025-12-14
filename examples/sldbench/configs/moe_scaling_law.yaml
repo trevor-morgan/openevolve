@@ -28,7 +28,7 @@ prompt:
     **DATA CHARACTERISTICS**
     - Features: [num_experts, dense_parameter_count] - 2D input
     - Labels: loss_validation - scalar output
-    - Dataset size: 193 
+    - Dataset size: 193
     - Number of experts: 1 to 64 experts (various configurations)
     - Dense parameter count: 1e8 to 8e8 parameters (100M to 800M parameters)
     - Validation loss range: 1.8 to 3.8 cross-entropy loss

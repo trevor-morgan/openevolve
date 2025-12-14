@@ -8,7 +8,7 @@ import sys
 # Add current directory to path for local imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from qwen3_benchmark_suite import Qwen3BenchmarkSuite, BenchmarkConfig
+from qwen3_benchmark_suite import BenchmarkConfig, Qwen3BenchmarkSuite
 
 
 def run_quick_test():
@@ -57,24 +57,24 @@ def run_quick_test():
         benchmark_suite = Qwen3BenchmarkSuite()
 
         print(f"\n{'='*80}")
-        print(f"Quick Benchmark Test - Qwen3-0.6B")
+        print("Quick Benchmark Test - Qwen3-0.6B")
         print(f"Testing {len(test_configs)} key scenarios with warmup")
-        print(f"Purpose: Validate Metal kernel optimization baseline")
+        print("Purpose: Validate Metal kernel optimization baseline")
         print(f"{'='*80}")
 
         # Global warmup - run one quick test to warm up the system
-        print(f"🔥 Running global warmup to initialize MLX and model...")
+        print("🔥 Running global warmup to initialize MLX and model...")
         try:
             mx.clear_cache()
             warmup_config = BenchmarkConfig(
                 name="warmup", prompt="Hello", max_tokens=5, description="Warmup run"
             )
-            print(f"   Global warmup in progress...")
+            print("   Global warmup in progress...")
             warmup_result = benchmark_suite.run_single_benchmark(warmup_config)
-            print(f"   ✅ Global warmup completed")
+            print("   ✅ Global warmup completed")
         except Exception as e:
             print(f"   ⚠️  Global warmup failed: {e}")
-            print(f"   Continuing with individual tests...")
+            print("   Continuing with individual tests...")
 
         results = []
         for i, config in enumerate(test_configs, 1):
@@ -90,7 +90,7 @@ def run_quick_test():
         # Print summary
         if results:
             print(f"\n{'='*80}")
-            print(f"Quick Test Results Summary")
+            print("Quick Test Results Summary")
             print(f"{'='*80}")
             print(f"{'Name':<25} {'Gen Tokens':<12} {'Decode Speed':<15} {'Memory':<10} {'CV%':<8}")
             print(f"{'-'*80}")
@@ -124,8 +124,8 @@ def run_quick_test():
         print("Quick test complete! If this looks good, run the full benchmark suite.")
         print("Full suite: python qwen3_benchmark_suite.py")
         print("Compare mode: python run_benchmarks.py --mode compare")
-        print(f"✅ All tests included proper warmup for reliable results")
-        print(f"🎯 Ready to test custom Metal kernel optimization!")
+        print("✅ All tests included proper warmup for reliable results")
+        print("🎯 Ready to test custom Metal kernel optimization!")
         print(f"{'='*80}")
 
         return results

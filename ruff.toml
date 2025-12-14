@@ -1,0 +1,207 @@
+# Ruff configuration for OpenEvolve
+# https://docs.astral.sh/ruff/configuration/
+
+# Target Python 3.10+
+target-version = "py310"
+
+# Line length matching common standards
+line-length = 100
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    "node_modules",
+]
+
+# Fix issues automatically where safe
+fix = true
+
+[lint]
+# Enable comprehensive rule sets
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "RUF",    # Ruff-specific rules
+    "PERF",   # Perflint
+    "LOG",    # flake8-logging
+    "G",      # flake8-logging-format
+]
+
+ignore = [
+    # Line too long - let formatter handle this
+    "E501",
+    # Too many arguments/branches/statements - be flexible for complex logic
+    "PLR0913",  # Too many arguments
+    "PLR0912",  # Too many branches
+    "PLR0915",  # Too many statements
+    "PLR2004",  # Magic value comparison
+    # Allow non-abstract empty methods in abstract base classes
+    "B027",
+    # Allow boolean positional args in function calls (like dict.get)
+    "FBT003",
+    # Allow f-strings in logging (modern Python)
+    "G004",
+    # Ignore complexity metrics that are too strict
+    "C901",     # Function too complex
+    "PLR0911",  # Too many return statements
+    # Allow try-except-pass for intentional suppression
+    "SIM105",
+    # Allow nested if/else (sometimes clearer)
+    "SIM102",
+    # Existing codebase: allow os.path usage (PTH rules)
+    "PTH100", "PTH103", "PTH107", "PTH108", "PTH110", "PTH112", "PTH113",
+    "PTH118", "PTH119", "PTH120", "PTH122", "PTH123", "PTH204", "PTH208",
+    # Allow global statements for existing patterns
+    "PLW0603",
+    # Allow imports outside top level (lazy imports for performance)
+    "PLC0415",
+    "E402",
+    # Allow unused arguments (common in callbacks/hooks)
+    "ARG001", "ARG002",
+    # Allow try-except in loops (sometimes necessary)
+    "PERF203",
+    # Allow implicit optional (for existing code)
+    "RUF013",
+    # SIM108 ternary - sometimes if/else is clearer
+    "SIM108",
+    # SIM118 dict keys - sometimes explicit is clearer
+    "SIM118",
+    # SIM201/SIM202 negate - sometimes clearer
+    "SIM201", "SIM202",
+    # Allow self-comparison (sometimes needed for nan checks etc)
+    "PLR0124",
+    # Allow bare except in existing code
+    "E722",
+    # Allow manual list comprehension (sometimes clearer)
+    "PERF401",
+    # Allow raise without from
+    "B904",
+    # Allow zip without strict
+    "B905",
+    # Allow mutable argument defaults (common in existing code)
+    "B006",
+    # Allow unused loop control variable
+    "B007",
+    # Allow unsorted __all__ (organized by category)
+    "RUF022",
+    # Allow logging string concat
+    "G003",
+    # PERF102 dict iterator - sometimes explicit is clearer
+    "PERF102",
+    # PLR1722 sys exit alias
+    "PLR1722",
+    # PLW0127 self-assigning variable
+    "PLW0127",
+    # SIM101 duplicate isinstance
+    "SIM101",
+    # C401 unnecessary generator set
+    "C401",
+    # UP038 isinstance tuple vs union - tuple is clearer for many devs
+    "UP038",
+    # Ambiguous unicode - OK in comments/docstrings
+    "RUF001", "RUF002", "RUF003",
+    # SIM103 return condition directly
+    "SIM103",
+    # B023 function binding loop variable - common pattern
+    "B023",
+    # E741 ambiguous variable name (I, l, O)
+    "E741",
+]
+
+# Allow autofix for all enabled rules (when `--fix` is provided)
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+# Tests can use assert, magic values, etc.
+"tests/**/*.py" = [
+    "PLR2004",  # Magic value comparisons OK in tests
+    "S101",     # assert OK in tests
+    "ARG001",   # Unused function args OK in tests (fixtures)
+    "ARG002",   # Unused method args OK in tests
+    "F841",     # Unused variables OK in tests
+    "SIM117",   # Nested with OK in tests
+    "SIM115",   # tempfile OK without context manager in tests
+    "UP038",    # isinstance tuple OK in tests
+    "B017",     # assertRaises(Exception) OK in tests
+]
+# Examples can be simpler
+"examples/**/*.py" = [
+    "PLR2004",  # Magic values OK in examples
+    "ARG001",   # Unused args OK
+    "F401",     # Unused imports OK
+    "F841",     # Unused variables OK
+    "UP038",    # isinstance tuple OK
+    "RUF002",   # Unicode OK in docstrings
+    "SIM117",   # Nested with OK
+    "SIM115",   # tempfile OK without context manager
+    "RUF005",   # Concatenation OK
+    "C414",     # list() in sorted OK
+    "UP008",    # super() style OK
+]
+# Scripts can have different standards
+"scripts/**/*.py" = [
+    "PLR2004",
+    "F841",
+]
+# __init__.py files often have unused imports for re-export
+"__init__.py" = [
+    "F401",     # Unused imports OK for re-exports
+]
+
+[lint.isort]
+# isort configuration (replaces standalone isort)
+known-first-party = ["openevolve"]
+force-single-line = false
+combine-as-imports = true
+split-on-trailing-comma = true
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[lint.pyupgrade]
+# Keep runtime typing for Python 3.10 compatibility
+keep-runtime-typing = true
+
+[lint.flake8-bugbear]
+# Allow default mutable arguments for specific patterns
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[lint.pylint]
+# Reasonable limits
+max-args = 10
+max-branches = 15
+max-returns = 8
+max-statements = 60
+
+[format]
+# Use double quotes (like Black)
+quote-style = "double"
+
+# Indent with spaces (like Black)
+indent-style = "space"
+
+# Respect magic trailing commas (like Black)
+skip-magic-trailing-comma = false
+
+# Unix-style line endings
+line-ending = "lf"
+
+# Enable auto-formatting of docstrings
+docstring-code-format = true
+docstring-code-line-length = 80

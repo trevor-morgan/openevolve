@@ -6,14 +6,12 @@ import asyncio
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock, patch, MagicMock
 
 # Set dummy API key for testing
 os.environ["OPENAI_API_KEY"] = "test"
 
 from openevolve.config import Config
 from openevolve.controller import OpenEvolve
-from openevolve.database import Program, ProgramDatabase
 
 
 class TestIterationCounting(unittest.TestCase):
@@ -149,15 +147,16 @@ def evaluate(program_path):
         # Skip if optillm server not available
         try:
             import requests
+
             response = requests.get("http://localhost:8000/health", timeout=2)
             if response.status_code != 200:
                 self.skipTest("optillm server not available at localhost:8000")
         except:
             self.skipTest("optillm server not available at localhost:8000")
-        
+
         async def async_test():
             from openevolve.config import LLMModelConfig
-            
+
             config = Config()
             config.max_iterations = 8  # Smaller for stability
             config.checkpoint_interval = 4
@@ -172,7 +171,7 @@ def evaluate(program_path):
                     name="google/gemma-3-270m-it",
                     api_key="optillm",
                     api_base="http://localhost:8000/v1",
-                    weight=1.0
+                    weight=1.0,
                 )
             ]
 
@@ -208,7 +207,9 @@ def evaluate(program_path):
                 print("Evolution succeeded - verifying checkpoint behavior")
                 # Check that if we have successful iterations, checkpoints align properly
                 expected_checkpoints = [4, 8]  # Based on interval=4, iterations=8
-                successful_checkpoints = [cp for cp in expected_checkpoints if cp in checkpoint_calls]
+                successful_checkpoints = [
+                    cp for cp in expected_checkpoints if cp in checkpoint_calls
+                ]
                 # At least final checkpoint should exist if evolution completed
                 if 8 in checkpoint_calls:
                     print("Final checkpoint found as expected")

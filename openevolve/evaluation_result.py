@@ -2,9 +2,7 @@
 Evaluation result structures for OpenEvolve
 """
 
-import json
 from dataclasses import dataclass, field
-from typing import Dict, Union
 
 
 @dataclass
@@ -24,15 +22,15 @@ class EvaluationResult:
         ❌ Wrong:   {"combined_score": 0.85, "prompt_length": 7, "execution_time": 3}
     """
 
-    metrics: Dict[str, float]  # mandatory - existing contract
-    artifacts: Dict[str, Union[str, bytes]] = field(default_factory=dict)  # optional side-channel
+    metrics: dict[str, float]  # mandatory - existing contract
+    artifacts: dict[str, str | bytes] = field(default_factory=dict)  # optional side-channel
 
     @classmethod
-    def from_dict(cls, metrics: Dict[str, float]) -> "EvaluationResult":
+    def from_dict(cls, metrics: dict[str, float]) -> "EvaluationResult":
         """Auto-wrap dict returns for backward compatibility"""
         return cls(metrics=metrics)
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Backward compatibility - return just metrics"""
         return self.metrics
 

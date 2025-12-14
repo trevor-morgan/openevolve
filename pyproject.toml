@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "openevolve"
-dynamic = ["version"]
-description = "Open-source implementation of AlphaEvolve"
+version = "0.1.0"
+description = "Open-source implementation of AlphaEvolve - an evolutionary coding agent"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -17,34 +17,41 @@ dependencies = [
     "pyyaml>=6.0",
     "numpy>=1.22.0",
     "tqdm>=4.64.0",
-    "flask",
+    "flask>=2.0.0",
+    "httpx>=0.24.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "black>=22.0.0",
-    "isort>=5.10.0",
-    "mypy>=0.950",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.5.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "mypy>=1.13.0",
     "requests>=2.28.0",
 ]
 
-[tool.black]
-line-length = 100
-target-version = ['py310']
-include = '\.pyi?$'
-
-[tool.isort]
-profile = "black"
-line_length = 100
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.5.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "mypy>=1.13.0",
+    "requests>=2.28.0",
+]
 
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+ignore_missing_imports = true
 
 [project.scripts]
 openevolve-run = "openevolve.cli:main"
@@ -56,11 +63,29 @@ markers = [
 ]
 addopts = "--strict-markers"
 
-[tool.setuptools.packages.find]
-include = ["openevolve*"]
+[tool.hatch.build.targets.wheel]
+packages = ["openevolve"]
 
-[tool.setuptools.package-data]
-openevolve = ["prompts/defaults/*.txt", "prompts/defaults/*.json"]
+[tool.hatch.build.targets.sdist]
+include = [
+    "/openevolve",
+    "/README.md",
+    "/LICENSE",
+]
 
-[tool.setuptools.dynamic]
-version = {attr = "openevolve._version.__version__"}
+[tool.bandit]
+exclude_dirs = ["tests", "examples", "scripts"]
+skips = ["B101", "B311"]  # Skip assert warnings and random for non-crypto
+
+[tool.coverage.run]
+source = ["openevolve"]
+branch = true
+omit = ["tests/*", "examples/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

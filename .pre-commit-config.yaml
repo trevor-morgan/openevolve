@@ -1,0 +1,123 @@
+# Pre-commit hooks for OpenEvolve
+# https://pre-commit.com/
+#
+# Install: uv run pre-commit install
+# Run all: uv run pre-commit run --all-files
+# Update:  uv run pre-commit autoupdate
+
+default_language_version:
+  python: python3
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # File checks
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags in YAML
+      - id: check-toml
+      - id: check-json
+      - id: check-xml
+      - id: check-ast
+        name: Check Python AST validity
+
+      # Content checks
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+
+      # Security
+      - id: detect-private-key
+
+      # Whitespace and formatting
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      # Python-specific
+      - id: check-docstring-first
+      - id: debug-statements
+      - id: fix-byte-order-marker
+
+  # Ruff - Fast Python linter and formatter (replaces black, isort, flake8, pyupgrade)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.3
+    hooks:
+      # Linting with autofix
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+      # Formatting (replaces black)
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Type checking with mypy (disabled for now - too many issues in existing code)
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.13.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies:
+  #         - types-PyYAML
+  #         - types-requests
+  #       args: [--ignore-missing-imports, --no-strict-optional]
+  #       # Only check main package, not examples/tests
+  #       files: ^openevolve/
+  #       exclude: ^(tests|examples)/
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml, -ll]  # Only medium+ severity
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^(tests|examples)/
+
+  # Spell checking for comments and docstrings
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args: [--skip, "*.lock,*.yaml,*.json,*.csv", --ignore-words-list, "iff,nd,te,assertIn,mape,MAPE,nmae,NMAE,ans,ons"]
+        types_or: [python, markdown, rst]
+
+  # Check for common Python issues
+  - repo: https://github.com/adamchainz/django-upgrade
+    rev: 1.22.2
+    hooks:
+      - id: django-upgrade
+        args: [--target-version, "3.10"]
+        # Skip - only needed if using Django
+        stages: [manual]
+
+  # Validate pyproject.toml
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.23
+    hooks:
+      - id: validate-pyproject
+
+  # Check for unused imports/variables (in addition to ruff)
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest quick check
+        entry: uv run python -m pytest tests/ -x -q --ignore=tests/integration --ignore=tests/test_discovery.py --tb=no
+        language: system
+        pass_filenames: false
+        stages: [pre-push]  # Only run on push, not commit
+
+ci:
+  autofix_commit_msg: "style: auto-fix by pre-commit hooks"
+  autofix_prs: true
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autoupdate_schedule: monthly
+  skip: [pytest-check]  # Skip tests in CI pre-commit (run separately)
+  submodules: false

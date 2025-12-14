@@ -7,15 +7,13 @@ import os
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
-import json
-import time
 
 # Set dummy API key for testing to prevent OpenAI SDK import failures
 os.environ["OPENAI_API_KEY"] = "test"
 
 from openevolve.config import Config
 from openevolve.controller import OpenEvolve
-from openevolve.database import Program, ProgramDatabase
+from openevolve.database import Program
 
 
 class MockEvaluator:

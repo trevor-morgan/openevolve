@@ -12,8 +12,7 @@ import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from openevolve.llm.ensemble import LLMEnsemble
@@ -47,32 +46,33 @@ class ProblemSpace:
         ontology_generation: Generation of the ontology when problem was created
         known_variables: List of variable names in the current ontology
     """
+
     id: str
     description: str
-    constraints: List[str] = field(default_factory=list)
-    objectives: List[str] = field(default_factory=lambda: ["correctness"])
+    constraints: list[str] = field(default_factory=list)
+    objectives: list[str] = field(default_factory=lambda: ["correctness"])
     difficulty_level: float = 1.0
     generation: int = 0
-    parent_id: Optional[str] = None
-    evaluation_template: Optional[str] = None
-    test_cases: List[Dict[str, Any]] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    parent_id: str | None = None
+    evaluation_template: str | None = None
+    test_cases: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
     # Track which solutions have "solved" this problem
-    solved_by: List[str] = field(default_factory=list)
+    solved_by: list[str] = field(default_factory=list)
 
     # Ontology (state space) tracking - for Heisenberg Engine
-    ontology_id: Optional[str] = None
+    ontology_id: str | None = None
     ontology_generation: int = 0
-    known_variables: List[str] = field(default_factory=list)
+    known_variables: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ProblemSpace":
+    def from_dict(cls, data: dict[str, Any]) -> "ProblemSpace":
         """Deserialize from dictionary"""
         return cls(**data)
 
@@ -113,8 +113,8 @@ class ProblemSpace:
         self,
         ontology_id: str,
         ontology_generation: int,
-        variable_names: List[str],
-        variable_descriptions: Optional[Dict[str, str]] = None,
+        variable_names: list[str],
+        variable_descriptions: dict[str, str] | None = None,
     ) -> "ProblemSpace":
         """
         Create a new problem variant updated with ontology information.
@@ -138,8 +138,10 @@ class ProblemSpace:
         desc_addition = ""
         if new_vars:
             var_list = ", ".join(new_vars)
-            desc_addition = f"\n\n[ONTOLOGY EXPANDED: New variables discovered: {var_list}. " \
-                           f"These may affect solution performance in ways not previously considered.]"
+            desc_addition = (
+                f"\n\n[ONTOLOGY EXPANDED: New variables discovered: {var_list}. "
+                f"These may affect solution performance in ways not previously considered.]"
+            )
 
         # Create new problem with ontology info
         new_problem = ProblemSpace(
@@ -252,8 +254,8 @@ class ProblemEvolver:
         self.llm_ensemble = llm_ensemble
 
         # Track problem lineage
-        self.problem_history: Dict[str, ProblemSpace] = {}
-        self.current_problem: Optional[ProblemSpace] = None
+        self.problem_history: dict[str, ProblemSpace] = {}
+        self.current_problem: ProblemSpace | None = None
 
         logger.info("Initialized ProblemEvolver")
 
@@ -275,7 +277,7 @@ class ProblemEvolver:
         to the evolvable problem space model.
         """
         # Read the evaluator file
-        with open(evaluator_path, 'r') as f:
+        with open(evaluator_path) as f:
             eval_code = f.read()
 
         problem = ProblemSpace(
@@ -285,7 +287,7 @@ class ProblemEvolver:
             metadata={
                 "evaluator_path": evaluator_path,
                 "is_genesis": True,
-            }
+            },
         )
 
         self.set_genesis_problem(problem)
@@ -313,7 +315,7 @@ class ProblemEvolver:
     async def evolve(
         self,
         parent_problem: ProblemSpace,
-        solution_characteristics: Dict[str, Any],
+        solution_characteristics: dict[str, Any],
     ) -> ProblemSpace:
         """
         Evolve a solved problem into a more challenging variant.
@@ -357,7 +359,7 @@ class ProblemEvolver:
                 objectives=mutation_data.get("objectives", parent_problem.objectives),
                 difficulty_level=min(
                     parent_problem.difficulty_level + mutation_data.get("difficulty_delta", 0.5),
-                    self.config.max_difficulty
+                    self.config.max_difficulty,
                 ),
                 generation=parent_problem.generation + 1,
                 evaluation_template=parent_problem.evaluation_template,
@@ -371,7 +373,7 @@ class ProblemEvolver:
 
             # Ensure constraints don't exceed limit
             if len(new_problem.constraints) > self.config.max_constraints:
-                new_problem.constraints = new_problem.constraints[-self.config.max_constraints:]
+                new_problem.constraints = new_problem.constraints[-self.config.max_constraints :]
 
             self.problem_history[new_problem.id] = new_problem
 
@@ -416,7 +418,7 @@ class ProblemEvolver:
             objectives=parent_problem.objectives,
             difficulty_level=min(
                 parent_problem.difficulty_level + self.config.difficulty_increment,
-                self.config.max_difficulty
+                self.config.max_difficulty,
             ),
             generation=parent_problem.generation + 1,
             evaluation_template=parent_problem.evaluation_template,
@@ -427,12 +429,12 @@ class ProblemEvolver:
         self.problem_history[new_problem.id] = new_problem
         return new_problem
 
-    def _parse_mutation_response(self, response: str) -> Dict[str, Any]:
+    def _parse_mutation_response(self, response: str) -> dict[str, Any]:
         """Parse LLM response for mutation data"""
         import re
 
         # Try to extract JSON from response
-        json_match = re.search(r'\{[\s\S]*\}', response)
+        json_match = re.search(r"\{[\s\S]*\}", response)
         if json_match:
             try:
                 return json.loads(json_match.group())
@@ -443,7 +445,7 @@ class ProblemEvolver:
         logger.warning("Could not parse mutation response as JSON")
         return {}
 
-    def get_problem_lineage(self, problem_id: str) -> List[ProblemSpace]:
+    def get_problem_lineage(self, problem_id: str) -> list[ProblemSpace]:
         """Get the full lineage of a problem back to genesis"""
         lineage = []
         current_id = problem_id
@@ -463,19 +465,18 @@ class ProblemEvolver:
         }
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(data, f, indent=2)
 
         logger.info(f"Saved problem history with {len(self.problem_history)} problems")
 
     def load(self, path: str) -> None:
         """Load problem evolution history"""
-        with open(path, 'r') as f:
+        with open(path) as f:
             data = json.load(f)
 
         self.problem_history = {
-            pid: ProblemSpace.from_dict(pdata)
-            for pid, pdata in data.get("problems", {}).items()
+            pid: ProblemSpace.from_dict(pdata) for pid, pdata in data.get("problems", {}).items()
         }
 
         current_id = data.get("current_problem_id")

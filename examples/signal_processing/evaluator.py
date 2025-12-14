@@ -12,12 +12,12 @@ Where:
 - α₁=0.3, α₂=α₃=0.2, α₄=0.3: Weighting coefficients
 """
 
-import importlib.util
-import numpy as np
-import time
 import concurrent.futures
+import importlib.util
+import time
 import traceback
-from scipy import signal
+
+import numpy as np
 from scipy.stats import pearsonr
 
 
@@ -387,7 +387,7 @@ def evaluate(program_path):
                 print(f"Signal {i}: Timeout")
                 continue
             except Exception as e:
-                print(f"Signal {i}: Error - {str(e)}")
+                print(f"Signal {i}: Error - {e!s}")
                 continue
 
         # If no successful runs, return minimal scores
@@ -448,7 +448,7 @@ def evaluate(program_path):
         }
 
     except Exception as e:
-        print(f"Evaluation failed: {str(e)}")
+        print(f"Evaluation failed: {e!s}")
         print(traceback.format_exc())
         return {"composite_score": 0.0, "overall_score": 0.0, "error": str(e)}
 
@@ -499,10 +499,10 @@ def evaluate_stage1(program_path):
         except TimeoutError:
             return {"runs_successfully": 0.0, "error": "Timeout in stage 1"}
         except Exception as e:
-            return {"runs_successfully": 0.0, "error": f"Stage 1 error: {str(e)}"}
+            return {"runs_successfully": 0.0, "error": f"Stage 1 error: {e!s}"}
 
     except Exception as e:
-        return {"runs_successfully": 0.0, "error": f"Stage 1 failed: {str(e)}"}
+        return {"runs_successfully": 0.0, "error": f"Stage 1 failed: {e!s}"}
 
 
 def evaluate_stage2(program_path):

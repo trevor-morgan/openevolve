@@ -6,7 +6,7 @@ import asyncio
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from openevolve.config import DatabaseConfig, EvaluatorConfig, PromptConfig
 from openevolve.database import Program, ProgramDatabase
@@ -53,7 +53,7 @@ class TestEvaluationResult(unittest.TestCase):
 
         # Text should be encoded to bytes for size calculation
         text_size = eval_result.get_artifact_size("text")
-        self.assertEqual(text_size, len("hello world".encode("utf-8")))
+        self.assertEqual(text_size, len(b"hello world"))
 
         # Binary should return length directly
         binary_size = eval_result.get_artifact_size("binary")

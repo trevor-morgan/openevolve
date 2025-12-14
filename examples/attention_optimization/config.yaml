@@ -39,7 +39,7 @@ prompt:
     - **Multi-level tiling**: L1/L2/L3 cache-aware nested tiling
     Memory Layout Patterns:
     - **row_major**: Standard layout, good for sequential access
-    - **col_major**: Better for certain matrix operations  
+    - **col_major**: Better for certain matrix operations
     - **blocked**: Cache-friendly blocked layouts
     - **interleaved**: For reducing bank conflicts
     Vectorization Strategies:
@@ -49,7 +49,7 @@ prompt:
     - **full**: Comprehensive vectorization across all suitable dimensions
     Fusion Patterns (Reduce Memory Traffic):
     - **producer**: Fuse operations with their producers
-    - **consumer**: Fuse operations with their consumers  
+    - **consumer**: Fuse operations with their consumers
     - **both**: Aggressive fusion in both directions
     - **vertical**: Fuse across computation stages (QK -> softmax -> attention)
     - **horizontal**: Fuse across parallel operations

@@ -1,12 +1,10 @@
-import asyncio
-import os
-import uuid
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 
-from openevolve.database import Program, ProgramDatabase
 from openevolve.config import Config
+from openevolve.database import Program, ProgramDatabase
 from openevolve.evaluator import Evaluator
 from openevolve.llm.ensemble import LLMEnsemble
 from openevolve.prompt.sampler import PromptSampler
@@ -16,6 +14,7 @@ from openevolve.utils.code_utils import (
     format_diff_summary,
     parse_full_rewrite,
 )
+from openevolve.utils.metrics_utils import get_fitness_score
 
 
 @dataclass
@@ -58,7 +57,7 @@ async def run_iteration_with_shared_db(
         island_top_programs = database.get_top_programs(5, island_idx=parent_island)
         island_previous_programs = database.get_top_programs(3, island_idx=parent_island)
 
-        # Build prompt
+        # Build prompt (with meta-prompting context if enabled)
         prompt = prompt_sampler.build_prompt(
             current_program=parent.code,
             parent_program=parent.code,
@@ -71,6 +70,8 @@ async def run_iteration_with_shared_db(
             diff_based_evolution=config.diff_based_evolution,
             program_artifacts=parent_artifacts if parent_artifacts else None,
             feature_dimensions=database.config.feature_dimensions,
+            island_idx=parent_island,  # For meta-prompting
+            generation=parent.generation,  # For meta-prompting
         )
 
         result = Result(parent=parent)
@@ -87,7 +88,7 @@ async def run_iteration_with_shared_db(
             diff_blocks = extract_diffs(llm_response)
 
             if not diff_blocks:
-                logger.warning(f"Iteration {iteration+1}: No valid diffs found in response")
+                logger.warning(f"Iteration {iteration + 1}: No valid diffs found in response")
                 return None
 
             # Apply the diffs
@@ -98,7 +99,7 @@ async def run_iteration_with_shared_db(
             new_code = parse_full_rewrite(llm_response, config.language)
 
             if not new_code:
-                logger.warning(f"Iteration {iteration+1}: No valid code found in response")
+                logger.warning(f"Iteration {iteration + 1}: No valid code found in response")
                 return None
 
             child_code = new_code
@@ -107,7 +108,7 @@ async def run_iteration_with_shared_db(
         # Check code length
         if len(child_code) > config.max_code_length:
             logger.warning(
-                f"Iteration {iteration+1}: Generated code exceeds maximum length "
+                f"Iteration {iteration + 1}: Generated code exceeds maximum length "
                 f"({len(child_code)} > {config.max_code_length})"
             )
             return None
@@ -116,13 +117,22 @@ async def run_iteration_with_shared_db(
         child_id = str(uuid.uuid4())
         result.child_metrics = await evaluator.evaluate_program(child_code, child_id)
 
+        # Report outcome for meta-prompting (update strategy statistics)
+        if result.child_metrics:
+            feature_dims = database.config.feature_dimensions
+            parent_fitness = get_fitness_score(parent.metrics, feature_dims)
+            child_fitness = get_fitness_score(result.child_metrics, feature_dims)
+            prompt_sampler.report_outcome(
+                parent_fitness=parent_fitness,
+                child_fitness=child_fitness,
+                island_idx=parent_island,
+            )
+
         # Handle artifacts if they exist
         artifacts = evaluator.get_pending_artifacts(child_id)
 
         # Set template_key of Prompts
-        template_key = (
-            "full_rewrite_user" if not config.diff_based_evolution else "diff_user"
-        )
+        template_key = "full_rewrite_user" if not config.diff_based_evolution else "diff_user"
 
         # Create a child program
         result.child_program = Program(
@@ -143,7 +153,9 @@ async def run_iteration_with_shared_db(
                     "user": prompt["user"],
                     "responses": [llm_response] if llm_response is not None else [],
                 }
-            } if database.config.log_prompts else None,
+            }
+            if database.config.log_prompts
+            else None,
         )
 
         result.prompt = prompt

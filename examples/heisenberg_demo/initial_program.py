@@ -29,6 +29,8 @@ def sort_data(data: list) -> list:
                 result[j], result[j + 1] = result[j + 1], result[j]
 
     return result
+
+
 # EVOLVE-BLOCK-END
 
 

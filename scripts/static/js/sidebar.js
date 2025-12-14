@@ -45,7 +45,7 @@ const sidebar = document.getElementById('sidebar');
             // disable pointerEvents by default so expanding sidebar doesn't immediately capture the mouse
             pointerEvents: 'none',
         });
-        
+
         // Visible inner handle
         const handle = document.createElement('div');
         handle.id = 'sidebar-resizer-handle';
@@ -313,9 +313,9 @@ export function showSidebarContent(d, fromHover = false) {
     if (parentNodeForDiff && parentNodeForDiff.code && parentNodeForDiff.code.trim() !== '') {
         tabNames.push('Diff');
     }
- 
+
         let activeTab = lastSidebarTab && tabNames.includes(lastSidebarTab) ? lastSidebarTab : tabNames[0];
- 
+
         // Helper to render tab content
         // Simple line-level LCS diff renderer between two code strings
         function renderCodeDiff(aCode, bCode) {
@@ -336,7 +336,7 @@ export function showSidebarContent(d, fromHover = false) {
             while (i < m && j < n) {
                 if (a[i] === b[j]) {
                     parts.push({type: 'eq', line: a[i]});
-                    i++; j++; 
+                    i++; j++;
                 } else if (dp[i+1][j] >= dp[i][j+1]) {
                     parts.push({type: 'del', line: a[i]});
                     i++;
@@ -405,7 +405,7 @@ export function showSidebarContent(d, fromHover = false) {
                  }
                  // Show only the selected prompt
                  let promptVal = promptMap[lastPromptKey];
-                 
+
                  // Handle unicode escape for artifacts JSON display
                  if (lastPromptKey === 'artifacts' && typeof promptVal === 'string') {
                      try {
@@ -452,7 +452,7 @@ export function showSidebarContent(d, fromHover = false) {
              }
              return '';
          }
- 
+
      if (tabNames.length > 0) {
          tabHtml = '<div id="sidebar-tab-bar" style="display:flex;gap:0.7em;margin-bottom:0.7em;">' +
              tabNames.map((name) => `<span class="sidebar-tab${name===activeTab?' active':''}" data-tab="${name}">${name}</span>`).join('') + '</div>';

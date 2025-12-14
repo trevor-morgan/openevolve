@@ -39,28 +39,29 @@ Consider these algorithmic improvements for substantial performance gains:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import random
+
 import numpy as np
-from typing import Any, Dict, List, Optional
+
 
 class PolynomialReal:
     """
     Initial implementation of polynomial_real task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the PolynomialReal."""
         pass
-    
+
     def solve(self, problem):
         """
         Solve the polynomial_real problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to polynomial_real
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -86,19 +87,19 @@ class PolynomialReal:
             computed_roots = np.sort(computed_roots)[::-1]
             logging.debug(f"Computed roots (decreasing order): {computed_roots.tolist()}")
             return computed_roots.tolist()
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -127,24 +128,26 @@ class PolynomialReal:
                 logging.error(f"Polynomial real solution error {error} exceeds tolerance {tol}.")
                 return False
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = PolynomialReal()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

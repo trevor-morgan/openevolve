@@ -11,37 +11,40 @@ The Heisenberg Engine enables automatic discovery of hidden variables when
 optimization is stuck due to missing state space dimensions.
 """
 
-from openevolve.discovery.problem_space import ProblemSpace, ProblemEvolver
-from openevolve.discovery.skeptic import AdversarialSkeptic
-from openevolve.discovery.epistemic_archive import EpistemicArchive, Phenotype
-from openevolve.discovery.engine import DiscoveryEngine
-
-# Heisenberg Engine components (Ontological Expansion)
-from openevolve.discovery.ontology import (
-    Variable,
-    Ontology,
-    OntologyManager,
-)
-from openevolve.discovery.crisis_detector import (
-    EpistemicCrisis,
-    CrisisDetector,
-    CrisisDetectorConfig,
-)
-from openevolve.discovery.instrument_synthesizer import (
-    Probe,
-    ProbeResult,
-    InstrumentSynthesizer,
-    InstrumentSynthesizerConfig,
-)
 from openevolve.discovery.code_instrumenter import (
     CodeInstrumenter,
     InstrumentationResult,
 )
+from openevolve.discovery.crisis_detector import (
+    CrisisDetector,
+    CrisisDetectorConfig,
+    EpistemicCrisis,
+)
+from openevolve.discovery.engine import DiscoveryEngine
+from openevolve.discovery.epistemic_archive import EpistemicArchive, Phenotype
+from openevolve.discovery.instrument_synthesizer import (
+    InstrumentSynthesizer,
+    InstrumentSynthesizerConfig,
+    Probe,
+    ProbeResult,
+)
+
+# Heisenberg Engine components (Ontological Expansion)
+from openevolve.discovery.ontology import (
+    Ontology,
+    OntologyManager,
+    Variable,
+)
+from openevolve.discovery.problem_archive import ProblemArchive, ProblemArchiveConfig
+from openevolve.discovery.problem_space import ProblemEvolver, ProblemSpace
+from openevolve.discovery.skeptic import AdversarialSkeptic
 
 __all__ = [
     # Core Discovery Engine
     "ProblemSpace",
     "ProblemEvolver",
+    "ProblemArchive",
+    "ProblemArchiveConfig",
     "AdversarialSkeptic",
     "EpistemicArchive",
     "Phenotype",

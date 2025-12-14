@@ -1,0 +1,100 @@
+# Matrix Cache Demo Configuration
+#
+# This example demonstrates ontological expansion - discovering that cache
+# efficiency (loop ordering) matters for matrix multiplication performance.
+#
+# The naive ijk loop order is cache-unfriendly because B is accessed column-wise.
+# The ikj loop order is cache-friendly because B is accessed row-wise.
+# This causes 3-5x performance difference that isn't obvious from the code.
+
+max_iterations: 100
+checkpoint_interval: 20
+log_level: "INFO"
+
+# LLM configuration - Using Claude Opus via CLIProxyAPI
+llm:
+  models:
+    - name: "claude-opus-4-5-20251101"
+      weight: 1.0
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+  temperature: 1.0  # Claude thinking models require temperature=1
+  max_tokens: 16000
+
+# Database configuration
+database:
+  population_size: 100
+  archive_size: 50
+  num_islands: 3
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+
+# Evaluator configuration
+evaluator:
+  timeout: 120
+  parallel_evaluations: 2
+  cascade_evaluation: false  # Using direct evaluation
+
+# Discovery Mode - ENABLED
+discovery:
+  enabled: true
+  problem_description: |
+    Optimize matrix multiplication for maximum performance.
+
+    You must implement the multiplication yourself using loops.
+    Using numpy.dot, numpy.matmul, or @ operator is NOT ALLOWED.
+
+    The goal is to achieve the fastest possible matrix multiplication
+    while maintaining correctness. Consider:
+    - Loop ordering (which loops to nest how)
+    - Memory access patterns
+    - Any algorithmic improvements
+
+    The function signature must be:
+    def matrix_multiply(A: list, B: list) -> list
+
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 5
+
+  skeptic_enabled: true
+  skeptic:
+    num_attack_rounds: 2
+    attack_timeout: 15.0
+    static_analysis_enabled: true
+
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.15
+
+  solution_threshold: 0.85  # Higher threshold - need good cache efficiency
+
+  # Heisenberg Engine - ENABLED
+  heisenberg:
+    enabled: true
+
+    # Crisis detection - tuned for this problem
+    min_plateau_iterations: 25        # Detect plateau after 25 iterations
+    fitness_improvement_threshold: 0.01  # 1% improvement threshold
+    variance_window: 10
+    crisis_confidence_threshold: 0.6
+    cooldown_iterations: 15
+
+    # Probe synthesis
+    max_probes_per_crisis: 3
+    probe_timeout: 45.0
+
+    # Validation
+    validation_trials: 3
+    min_correlation_threshold: 0.5
+
+    # Ontology limits
+    max_ontology_generations: 5
+    max_variables_per_ontology: 20
+
+    # Soft reset
+    programs_to_keep_on_reset: 5
+
+    # Instrumentation
+    auto_instrument: true
+    instrumentation_level: "standard"

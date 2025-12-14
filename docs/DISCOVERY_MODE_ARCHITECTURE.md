@@ -200,19 +200,45 @@ discovery:
   problem_evolution_enabled: true
   evolve_problem_after_solutions: 5
 
+  # POET-style paired co-evolution (multiple active problems)
+  # NOTE: requires your evaluator to accept `problem_context` (or **kwargs) and ideally
+  # to actually use it (e.g., adjust scoring/constraints). Otherwise coevolution is disabled.
+  coevolution_enabled: true
+  max_active_problems: 3
+  novelty_threshold: 0.12
+  min_problem_difficulty: 0.8
+  max_problem_difficulty: 5.0
+  min_islands_per_problem: 1
+
+  # Minimal-criterion transfer screening for candidate problems
+  # Screen by briefly re-evaluating top solvers on the candidate problem context.
+  # Admit only if:
+  #   min_transfer_fitness <= best_transfer_fitness < max_transfer_fitness
+  transfer_trial_programs: 3
+  min_transfer_fitness: 0.3
+  max_transfer_fitness: null  # defaults to solution_threshold
+  transfer_max_stage: 2       # cap cascade stage for screening
+
   # Adversarial skeptic
-  skeptic_enabled: true
-  skeptic:
-    num_attack_rounds: 3
-    attack_timeout: 30.0
-    enable_blind_reproduction: false
+	  skeptic_enabled: true
+	  skeptic:
+	    num_attack_rounds: 3
+	    attack_timeout: 30.0
+	    enable_blind_reproduction: false
+	    # Optional adaptive budget + plugins
+	    adaptive_attack_rounds: false
+	    min_attack_rounds: 1
+	    max_attack_rounds: null
+	    plugins: []
 
   # Archive enhancements
   surprise_tracking_enabled: true
   curiosity_sampling_enabled: true
-  phenotype_dimensions:
-    - "complexity"
-    - "efficiency"
+	  phenotype_dimensions:
+	    - "complexity"
+	    - "efficiency"
+	  # Optional phenotype dims to mirror into metrics for MAP-Elites
+	  phenotype_feature_dimensions: []
 
   # Thresholds
   solution_threshold: 0.8

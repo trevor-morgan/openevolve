@@ -7,9 +7,10 @@ triggers a novelty check that uses asyncio.run(), which fails because it's alrea
 running in an event loop.
 """
 
-import unittest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+import unittest
+from unittest.mock import MagicMock, patch
+
 from openevolve.config import Config
 from openevolve.database import Program, ProgramDatabase
 
@@ -25,7 +26,7 @@ class MockLLM:
 class TestNoveltyAsyncioIssue(unittest.TestCase):
     """Test for asyncio.run() error in novelty checking (issue #313)"""
 
-    @patch('openevolve.embedding.EmbeddingClient')
+    @patch("openevolve.embedding.EmbeddingClient")
     def setUp(self, mock_embedding_client_class):
         """Set up test database with novelty checking enabled"""
         # Mock the embedding client
@@ -37,9 +38,8 @@ class TestNoveltyAsyncioIssue(unittest.TestCase):
         config.database.in_memory = True
         config.database.embedding_model = "text-embedding-3-small"
         config.database.similarity_threshold = 0.99
-        config.database.novelty_llm = MockLLM()
 
-        self.db = ProgramDatabase(config.database)
+        self.db = ProgramDatabase(config.database, novelty_llm=MockLLM())
         self.mock_embedding_client_class = mock_embedding_client_class
 
     def test_novelty_check_from_async_context_works(self):
@@ -51,7 +51,6 @@ class TestNoveltyAsyncioIssue(unittest.TestCase):
         any asyncio.run() errors, properly using ThreadPoolExecutor to handle
         the async LLM call from within a running event loop.
         """
-        import logging
 
         # Create two programs with similar embeddings to trigger LLM novelty check
         program1 = Program(

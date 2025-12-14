@@ -11,33 +11,32 @@ The Discovery Engine runs on TOP of OpenEvolve's existing evolution loop,
 adding the key capabilities needed for true scientific discovery.
 """
 
-import asyncio
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from openevolve.controller import OpenEvolve
     from openevolve.database import Program
 
-from openevolve.discovery.problem_space import (
-    ProblemSpace,
-    ProblemEvolver,
-    ProblemEvolverConfig,
+from openevolve.config import DiscoveryConfig
+from openevolve.discovery.code_instrumenter import (
+    CodeInstrumenter,
 )
-from openevolve.discovery.skeptic import (
-    AdversarialSkeptic,
-    SkepticConfig,
-    FalsificationResult,
+from openevolve.discovery.crisis_detector import (
+    CrisisDetector,
+    CrisisDetectorConfig,
+    EpistemicCrisis,
 )
 from openevolve.discovery.epistemic_archive import (
     EpistemicArchive,
-    Phenotype,
-    SurpriseMetric,
+)
+from openevolve.discovery.instrument_synthesizer import (
+    InstrumentSynthesizer,
+    InstrumentSynthesizerConfig,
 )
 
 # Heisenberg Engine imports (Ontological Expansion)
@@ -46,71 +45,29 @@ from openevolve.discovery.ontology import (
     OntologyManager,
     Variable,
 )
-from openevolve.discovery.crisis_detector import (
-    CrisisDetector,
-    CrisisDetectorConfig,
-    EpistemicCrisis,
+from openevolve.discovery.problem_archive import (
+    ProblemArchive,
+    ProblemArchiveConfig,
 )
-from openevolve.discovery.instrument_synthesizer import (
-    InstrumentSynthesizer,
-    InstrumentSynthesizerConfig,
-    Probe,
-    ProbeResult,
+from openevolve.discovery.problem_space import (
+    ProblemEvolver,
+    ProblemEvolverConfig,
+    ProblemSpace,
 )
-from openevolve.discovery.code_instrumenter import (
-    CodeInstrumenter,
-)
+from openevolve.discovery.skeptic import AdversarialSkeptic
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DiscoveryConfig:
-    """Configuration for the Discovery Engine"""
-
-    # Problem evolution
-    evolve_problem_after_solutions: int = 5  # Evolve problem after N successful solutions
-    problem_evolution_enabled: bool = True
-
-    # Adversarial skepticism
-    skeptic_enabled: bool = True
-    skeptic_config: SkepticConfig = field(default_factory=SkepticConfig)
-
-    # Epistemic archive
-    surprise_tracking_enabled: bool = True
-    curiosity_sampling_enabled: bool = True
-    phenotype_dimensions: List[str] = field(
-        default_factory=lambda: ["complexity", "efficiency"]
-    )
-
-    # Thresholds
-    solution_threshold: float = 0.8  # Fitness threshold to consider problem "solved"
-    surprise_bonus_threshold: float = 0.2  # Surprise level to trigger bonus exploration
-
-    # Logging
-    log_discoveries: bool = True
-    discovery_log_path: Optional[str] = None
-
-    # Heisenberg Engine (Ontological Expansion)
-    heisenberg_enabled: bool = False
-    heisenberg_min_plateau_iterations: int = 50
-    heisenberg_fitness_threshold: float = 0.001
-    heisenberg_variance_window: int = 20
-    heisenberg_confidence_threshold: float = 0.7
-    heisenberg_max_probes: int = 5
-    heisenberg_probe_timeout: float = 60.0
-    heisenberg_validation_trials: int = 5
-    heisenberg_programs_to_keep: int = 10
-
-
-@dataclass
 class DiscoveryEvent:
     """Record of a discovery event"""
+
     timestamp: float
     event_type: str  # "solution", "problem_evolution", "surprise", "falsification"
     problem_id: str
-    program_id: Optional[str] = None
-    details: Dict[str, Any] = field(default_factory=dict)
+    program_id: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 class DiscoveryEngine:
@@ -139,26 +96,52 @@ class DiscoveryEngine:
         self.config = config
         self.openevolve = openevolve
 
+        # Multi-problem co-evolution archive (optional)
+        self.problem_archive: ProblemArchive | None = None
+        if self.config.coevolution_enabled:
+            num_islands = getattr(openevolve.config.database, "num_islands", 1)
+            archive_cfg = ProblemArchiveConfig(
+                enabled=True,
+                max_active_problems=self.config.max_active_problems,
+                spawn_after_solutions=self.config.evolve_problem_after_solutions,
+                novelty_threshold=self.config.novelty_threshold,
+                min_difficulty=self.config.min_problem_difficulty,
+                max_difficulty=self.config.max_problem_difficulty,
+                min_islands_per_problem=self.config.min_islands_per_problem,
+            )
+            self.problem_archive = ProblemArchive(archive_cfg, num_islands=num_islands)
+
         # Initialize components
         self.problem_evolver = ProblemEvolver(
             config=ProblemEvolverConfig(),
             llm_ensemble=openevolve.llm_ensemble,
         )
 
-        self.skeptic = AdversarialSkeptic(
-            config=config.skeptic_config,
-            llm_ensemble=openevolve.llm_ensemble,
-        ) if config.skeptic_enabled else None
+        self.skeptic = (
+            AdversarialSkeptic(
+                config=config.skeptic,
+                llm_ensemble=openevolve.llm_ensemble,
+            )
+            if config.skeptic_enabled
+            else None
+        )
 
         self.archive = EpistemicArchive(
             database=openevolve.database,
             phenotype_dimensions=config.phenotype_dimensions,
+            custom_phenotype_extractor=getattr(
+                getattr(openevolve, "evaluator", None),
+                "custom_phenotype_extractor",
+                None,
+            ),
+            mirror_dimensions=getattr(config, "phenotype_feature_dimensions", None),
         )
 
         # State tracking
-        self.current_problem: Optional[ProblemSpace] = None
+        self.current_problem: ProblemSpace | None = None
         self.solutions_since_evolution: int = 0
-        self.discovery_events: List[DiscoveryEvent] = []
+        self.discovery_events: list[DiscoveryEvent] = []
+        self._last_spawn_solution_count: dict[str, int] = {}
 
         # Statistics
         self.stats = {
@@ -172,12 +155,12 @@ class DiscoveryEngine:
         }
 
         # Heisenberg Engine components (initialized if enabled)
-        self.ontology_manager: Optional[OntologyManager] = None
-        self.crisis_detector: Optional[CrisisDetector] = None
-        self.instrument_synthesizer: Optional[InstrumentSynthesizer] = None
-        self.code_instrumenter: Optional[CodeInstrumenter] = None
+        self.ontology_manager: OntologyManager | None = None
+        self.crisis_detector: CrisisDetector | None = None
+        self.instrument_synthesizer: InstrumentSynthesizer | None = None
+        self.code_instrumenter: CodeInstrumenter | None = None
 
-        if config.heisenberg_enabled:
+        if getattr(config, "heisenberg", None) and config.heisenberg.enabled:
             self._init_heisenberg_engine()
 
         logger.info("Initialized DiscoveryEngine")
@@ -191,18 +174,18 @@ class DiscoveryEngine:
 
         # Initialize Crisis Detector
         crisis_config = CrisisDetectorConfig(
-            min_plateau_iterations=self.config.heisenberg_min_plateau_iterations,
-            fitness_improvement_threshold=self.config.heisenberg_fitness_threshold,
-            variance_window=self.config.heisenberg_variance_window,
-            confidence_threshold=self.config.heisenberg_confidence_threshold,
+            min_plateau_iterations=self.config.heisenberg.min_plateau_iterations,
+            fitness_improvement_threshold=self.config.heisenberg.fitness_improvement_threshold,
+            variance_window=self.config.heisenberg.variance_window,
+            confidence_threshold=self.config.heisenberg.crisis_confidence_threshold,
         )
         self.crisis_detector = CrisisDetector(crisis_config)
 
         # Initialize Instrument Synthesizer
         synth_config = InstrumentSynthesizerConfig(
-            max_probes_per_crisis=self.config.heisenberg_max_probes,
-            probe_timeout=self.config.heisenberg_probe_timeout,
-            validation_trials=self.config.heisenberg_validation_trials,
+            max_probes_per_crisis=self.config.heisenberg.max_probes_per_crisis,
+            probe_timeout=self.config.heisenberg.probe_timeout,
+            validation_trials=self.config.heisenberg.validation_trials,
         )
         self.instrument_synthesizer = InstrumentSynthesizer(
             synth_config,
@@ -217,7 +200,7 @@ class DiscoveryEngine:
     def set_genesis_problem(
         self,
         description: str,
-        evaluator_path: Optional[str] = None,
+        evaluator_path: str | None = None,
     ) -> ProblemSpace:
         """
         Initialize with a genesis problem.
@@ -241,13 +224,17 @@ class DiscoveryEngine:
             self.problem_evolver.set_genesis_problem(problem)
 
         self.current_problem = problem
+        if self.problem_archive is not None:
+            self.problem_archive.initialize_genesis(problem)
 
-        self._log_event(DiscoveryEvent(
-            timestamp=time.time(),
-            event_type="genesis",
-            problem_id=problem.id,
-            details={"description": description},
-        ))
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="genesis",
+                problem_id=problem.id,
+                details={"description": description},
+            )
+        )
 
         logger.info(f"Set genesis problem: {description[:100]}...")
         return problem
@@ -255,7 +242,7 @@ class DiscoveryEngine:
     async def process_program(
         self,
         program: "Program",
-    ) -> Tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """
         Process a program through the discovery pipeline.
 
@@ -268,8 +255,21 @@ class DiscoveryEngine:
         Returns:
             Tuple of (is_valid_solution, metadata_dict)
         """
+        # Determine which problem this program was evaluated under.
+        problem_id = None
+        if program.metadata:
+            problem_id = program.metadata.get("problem_id")
+
+        problem = self.current_problem
+        if self.problem_archive is not None and problem_id:
+            rec = self.problem_archive.get_record(problem_id)
+            if rec:
+                problem = rec.problem
+        if problem_id is None and problem is not None:
+            problem_id = problem.id
+
         metadata = {
-            "problem_id": self.current_problem.id if self.current_problem else None,
+            "problem_id": problem_id,
             "falsification_passed": True,
             "surprise_score": 0.0,
             "is_solution": False,
@@ -280,12 +280,13 @@ class DiscoveryEngine:
 
         # Step 2: Adversarial falsification
         if self.skeptic and self.config.skeptic_enabled:
-            description = self.current_problem.description if self.current_problem else ""
+            description = problem.description if problem else ""
 
             survived, results = await self.skeptic.falsify(
                 program,
                 description=description,
                 language=program.language or "python",
+                fitness=program.metrics.get("combined_score", 0.0),
             )
 
             metadata["falsification_passed"] = survived
@@ -293,16 +294,18 @@ class DiscoveryEngine:
 
             if not survived:
                 self.stats["falsified_programs"] += 1
-                self._log_event(DiscoveryEvent(
-                    timestamp=time.time(),
-                    event_type="falsification",
-                    problem_id=self.current_problem.id if self.current_problem else "",
-                    program_id=program.id,
-                    details={
-                        "attack_type": results[-1].attack_type if results else "unknown",
-                        "error": results[-1].error_message if results else None,
-                    },
-                ))
+                self._log_event(
+                    DiscoveryEvent(
+                        timestamp=time.time(),
+                        event_type="falsification",
+                        problem_id=problem_id or "",
+                        program_id=program.id,
+                        details={
+                            "attack_type": results[-1].attack_type if results else "unknown",
+                            "error": results[-1].error_message if results else None,
+                        },
+                    )
+                )
 
                 logger.info(f"Program {program.id} FALSIFIED - not a valid solution")
                 return False, metadata
@@ -319,18 +322,20 @@ class DiscoveryEngine:
 
             if surprise.surprise_score > self.config.surprise_bonus_threshold:
                 self.stats["high_surprise_events"] += 1
-                self._log_event(DiscoveryEvent(
-                    timestamp=time.time(),
-                    event_type="surprise",
-                    problem_id=self.current_problem.id if self.current_problem else "",
-                    program_id=program.id,
-                    details={
-                        "predicted": surprise.predicted_fitness,
-                        "actual": surprise.actual_fitness,
-                        "surprise": surprise.surprise_score,
-                        "positive": surprise.is_positive_surprise,
-                    },
-                ))
+                self._log_event(
+                    DiscoveryEvent(
+                        timestamp=time.time(),
+                        event_type="surprise",
+                        problem_id=problem_id or "",
+                        program_id=program.id,
+                        details={
+                            "predicted": surprise.predicted_fitness,
+                            "actual": surprise.actual_fitness,
+                            "surprise": surprise.surprise_score,
+                            "positive": surprise.is_positive_surprise,
+                        },
+                    )
+                )
 
         # Step 4: Check if this is a solution
         fitness = program.metrics.get("combined_score", 0.0)
@@ -339,39 +344,59 @@ class DiscoveryEngine:
         if is_solution:
             metadata["is_solution"] = True
             self.stats["successful_solutions"] += 1
-            self.solutions_since_evolution += 1
+            if self.problem_archive is None:
+                # Single-problem mode
+                self.solutions_since_evolution += 1
+                if self.current_problem:
+                    if program.id not in self.current_problem.solved_by:
+                        self.current_problem.solved_by.append(program.id)
+            else:
+                # Co-evolution mode: mark solution on the specific problem
+                if problem and program.id not in problem.solved_by:
+                    problem.solved_by.append(program.id)
 
-            if self.current_problem:
-                self.current_problem.solved_by.append(program.id)
-
-            self._log_event(DiscoveryEvent(
-                timestamp=time.time(),
-                event_type="solution",
-                problem_id=self.current_problem.id if self.current_problem else "",
-                program_id=program.id,
-                details={
-                    "fitness": fitness,
-                    "phenotype": program.metadata.get("phenotype", {}),
-                },
-            ))
+            self._log_event(
+                DiscoveryEvent(
+                    timestamp=time.time(),
+                    event_type="solution",
+                    problem_id=problem_id or "",
+                    program_id=program.id,
+                    details={
+                        "fitness": fitness,
+                        "phenotype": program.metadata.get("phenotype", {}),
+                    },
+                )
+            )
 
             logger.info(
                 f"SOLUTION FOUND: Program {program.id} solves problem "
-                f"{self.current_problem.id if self.current_problem else 'unknown'} "
+                f"{problem_id or 'unknown'} "
                 f"with fitness {fitness:.3f}"
             )
 
             # Step 5: Check if we should evolve the problem
-            if (
-                self.config.problem_evolution_enabled and
-                self.solutions_since_evolution >= self.config.evolve_problem_after_solutions
-            ):
-                await self._evolve_problem()
+            if self.problem_archive is None:
+                if (
+                    self.config.problem_evolution_enabled
+                    and self.solutions_since_evolution >= self.config.evolve_problem_after_solutions
+                ):
+                    await self._evolve_problem()
 
         # Step 6: Heisenberg Engine - Check for epistemic crisis
         if self.crisis_detector is not None:
             # Record this evaluation for crisis analysis
-            artifacts = program.metadata.get("artifacts", {})
+            artifacts = {}
+            if program.metadata and "artifacts" in program.metadata:
+                artifacts = program.metadata.get("artifacts") or {}
+            else:
+                try:
+                    artifacts = self.openevolve.database.get_artifacts(program.id) or {}
+                except Exception:
+                    artifacts = {}
+                if artifacts:
+                    if program.metadata is None:
+                        program.metadata = {}
+                    program.metadata["artifacts"] = artifacts
             self.crisis_detector.record_evaluation(
                 iteration=self.stats["total_iterations"],
                 metrics=program.metrics,
@@ -383,6 +408,35 @@ class DiscoveryEngine:
             if crisis:
                 await self._handle_epistemic_crisis(crisis, program)
                 metadata["crisis_detected"] = crisis.to_dict()
+
+        # Record per-problem progress in co-evolution mode.
+        if self.problem_archive is not None and problem_id:
+            iter_idx = getattr(program, "iteration_found", self.stats["total_iterations"])
+            try:
+                self.problem_archive.record_program_result(
+                    problem_id=problem_id,
+                    fitness=float(fitness),
+                    iteration=int(iter_idx),
+                    program_id=program.id,
+                    solution_threshold=self.config.solution_threshold,
+                )
+            except Exception as e:
+                logger.debug(f"ProblemArchive record failed: {e}")
+
+            # Spawn new problems POET-style when a problem is repeatedly solved.
+            if (
+                is_solution
+                and self.config.problem_evolution_enabled
+                and self.problem_archive.should_spawn_child(problem_id)
+            ):
+                rec = self.problem_archive.get_record(problem_id)
+                if rec is not None:
+                    last_spawn = self._last_spawn_solution_count.get(problem_id, 0)
+                    spawn_every = self.config.evolve_problem_after_solutions
+                    if rec.solutions - last_spawn >= spawn_every:
+                        spawned = await self._spawn_child_problem(rec.problem)
+                        if spawned is not None:
+                            self._last_spawn_solution_count[problem_id] = rec.solutions
 
         self.stats["total_iterations"] += 1
         return is_solution, metadata
@@ -401,17 +455,19 @@ class DiscoveryEngine:
             solution_characteristics,
         )
 
-        self._log_event(DiscoveryEvent(
-            timestamp=time.time(),
-            event_type="problem_evolution",
-            problem_id=new_problem.id,
-            details={
-                "parent_problem_id": self.current_problem.id,
-                "new_constraints": new_problem.constraints,
-                "new_difficulty": new_problem.difficulty_level,
-                "solution_characteristics": solution_characteristics,
-            },
-        ))
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="problem_evolution",
+                problem_id=new_problem.id,
+                details={
+                    "parent_problem_id": self.current_problem.id,
+                    "new_constraints": new_problem.constraints,
+                    "new_difficulty": new_problem.difficulty_level,
+                    "solution_characteristics": solution_characteristics,
+                },
+            )
+        )
 
         self.current_problem = new_problem
         self.solutions_since_evolution = 0
@@ -421,6 +477,154 @@ class DiscoveryEngine:
             f"PROBLEM EVOLVED: {new_problem.id} "
             f"(generation {new_problem.generation}, difficulty {new_problem.difficulty_level:.1f})"
         )
+
+    async def _spawn_child_problem(self, parent_problem: ProblemSpace) -> ProblemSpace | None:
+        """Spawn a mutated child problem and assign an island (coevolution mode)."""
+        solution_characteristics = self._get_solution_characteristics(parent_problem)
+        new_problem = await self.problem_evolver.evolve(
+            parent_problem,
+            solution_characteristics,
+        )
+
+        if self.problem_archive is None:
+            # Fallback to legacy behavior
+            self.current_problem = new_problem
+            self.solutions_since_evolution = 0
+            self.stats["problem_evolutions"] += 1
+            return new_problem
+
+        if not await self._passes_minimal_criterion(new_problem):
+            logger.info(
+                f"ProblemArchive minimal-criterion rejected candidate {new_problem.id} "
+                f"(parent {parent_problem.id})"
+            )
+            return None
+
+        if not self.problem_archive.admit_candidate(new_problem):
+            logger.info(
+                f"ProblemArchive rejected candidate {new_problem.id} "
+                f"(parent {parent_problem.id})"
+            )
+            return None
+
+        self.problem_archive.add_problem(new_problem)
+        island = self.problem_archive.allocate_island_for_new_problem()
+        if island is not None:
+            self.problem_archive.assign_island(new_problem.id, island)
+
+        self.problem_evolver.current_problem = new_problem
+        self.current_problem = new_problem
+        self.stats["problem_evolutions"] += 1
+
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="problem_evolution",
+                problem_id=new_problem.id,
+                details={
+                    "parent_problem_id": parent_problem.id,
+                    "new_constraints": new_problem.constraints,
+                    "new_difficulty": new_problem.difficulty_level,
+                    "solution_characteristics": solution_characteristics,
+                    "assigned_island": island,
+                },
+            )
+        )
+
+        logger.info(
+            f"PROBLEM SPAWNED: {new_problem.id} "
+            f"(parent {parent_problem.id}, difficulty {new_problem.difficulty_level:.1f}, "
+            f"island {island})"
+        )
+        return new_problem
+
+    async def _passes_minimal_criterion(self, candidate: ProblemSpace) -> bool:
+        """Screen candidate problems by testing transfer from existing solvers.
+
+        A candidate is admitted if the best transferred solver fitness is:
+            min_transfer_fitness <= best < max_transfer_fitness.
+        """
+        if self.problem_archive is None:
+            return True
+
+        try:
+            trial_n = max(1, int(self.config.transfer_trial_programs))
+        except Exception:
+            trial_n = 3
+
+        # If we have no solvers yet, accept.
+        top_programs = self.openevolve.database.get_top_programs(trial_n)
+        if not top_programs:
+            return True
+
+        context = candidate.to_prompt_context()
+
+        best_fitness = 0.0
+        trial_results: list[float] = []
+
+        import uuid
+
+        from openevolve.utils.metrics_utils import get_fitness_score
+
+        for prog in top_programs:
+            try:
+                metrics = await self.openevolve.evaluator.evaluate_program(
+                    prog.code,
+                    program_id=f"transfer_{prog.id}_{candidate.id}_{uuid.uuid4().hex[:6]}",
+                    problem_context=context,
+                    max_stage=self.config.transfer_max_stage,
+                    use_llm_feedback=False,
+                )
+
+                if "combined_score_raw" in metrics:
+                    fitness = float(metrics["combined_score_raw"])
+                elif "combined_score" in metrics:
+                    fitness = float(metrics["combined_score"])
+                else:
+                    fitness = float(
+                        get_fitness_score(
+                            metrics, self.openevolve.database.config.feature_dimensions
+                        )
+                    )
+
+                trial_results.append(fitness)
+                best_fitness = max(best_fitness, fitness)
+            except Exception as e:
+                logger.debug(f"Transfer screening failed for {prog.id}: {e}")
+
+        ceiling = (
+            float(self.config.max_transfer_fitness)
+            if self.config.max_transfer_fitness is not None
+            else float(self.config.solution_threshold)
+        )
+        floor = float(self.config.min_transfer_fitness)
+
+        passed = (best_fitness >= floor) and (best_fitness < ceiling)
+
+        logger.info(
+            f"Transfer screening candidate {candidate.id} (parent {candidate.parent_id}): "
+            f"best={best_fitness:.3f}, floor={floor:.3f}, ceiling={ceiling:.3f} -> "
+            f"{'PASS' if passed else 'REJECT'}"
+        )
+
+        # Log a screening event for transparency
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="candidate_screening",
+                problem_id=candidate.id,
+                details={
+                    "parent_problem_id": candidate.parent_id,
+                    "transfer_best_fitness": best_fitness,
+                    "transfer_trials": trial_results,
+                    "floor": floor,
+                    "ceiling": ceiling,
+                    "passed": passed,
+                },
+            )
+        )
+
+        return passed
 
     async def _handle_epistemic_crisis(
         self,
@@ -445,18 +649,20 @@ class DiscoveryEngine:
         self.stats["epistemic_crises"] += 1
 
         # Log the crisis event
-        self._log_event(DiscoveryEvent(
-            timestamp=time.time(),
-            event_type="epistemic_crisis",
-            problem_id=self.current_problem.id if self.current_problem else "",
-            program_id=triggering_program.id,
-            details={
-                "crisis_type": crisis.crisis_type,
-                "confidence": crisis.confidence,
-                "evidence": crisis.evidence,
-                "suggested_probes": crisis.suggested_probes,
-            },
-        ))
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="epistemic_crisis",
+                problem_id=self.current_problem.id if self.current_problem else "",
+                program_id=triggering_program.id,
+                details={
+                    "crisis_type": crisis.crisis_type,
+                    "confidence": crisis.confidence,
+                    "evidence": crisis.evidence,
+                    "suggested_probes": crisis.suggested_probes,
+                },
+            )
+        )
 
         # Get current ontology (or create genesis if none exists)
         if self.ontology_manager.current_ontology is None:
@@ -471,7 +677,7 @@ class DiscoveryEngine:
         )
 
         # Execute probes and collect discoveries
-        discovered_variables: List[Variable] = []
+        discovered_variables: list[Variable] = []
 
         for probe in probes:
             logger.info(f"Executing probe: {probe.id} ({probe.probe_type})")
@@ -522,17 +728,19 @@ class DiscoveryEngine:
             self.stats["ontology_expansions"] += 1
 
             # Log the expansion event
-            self._log_event(DiscoveryEvent(
-                timestamp=time.time(),
-                event_type="ontology_expansion",
-                problem_id=self.current_problem.id if self.current_problem else "",
-                details={
-                    "new_variables": [v.name for v in discovered_variables],
-                    "ontology_generation": new_ontology.generation,
-                    "triggered_by_crisis": crisis.id,
-                    "variable_details": [v.to_dict() for v in discovered_variables],
-                },
-            ))
+            self._log_event(
+                DiscoveryEvent(
+                    timestamp=time.time(),
+                    event_type="ontology_expansion",
+                    problem_id=self.current_problem.id if self.current_problem else "",
+                    details={
+                        "new_variables": [v.name for v in discovered_variables],
+                        "ontology_generation": new_ontology.generation,
+                        "triggered_by_crisis": crisis.id,
+                        "variable_details": [v.to_dict() for v in discovered_variables],
+                    },
+                )
+            )
 
             # Perform soft reset
             await self._perform_soft_reset(new_ontology)
@@ -549,46 +757,77 @@ class DiscoveryEngine:
         """
         logger.info("Performing soft reset after ontology expansion...")
 
+        # Keep a small, high-quality working set to restart exploration.
+        keep_n = int(getattr(self.config.heisenberg, "programs_to_keep_on_reset", 0) or 0)
+        if keep_n > 0 and getattr(self.openevolve, "database", None) is not None:
+            db = self.openevolve.database
+            get_top = getattr(db, "get_top_programs", None)
+            retain = getattr(db, "retain_programs", None)
+            if callable(get_top) and callable(retain):
+                try:
+                    before = len(getattr(db, "programs", {}) or {})
+                    keep_ids = {p.id for p in get_top(keep_n) if getattr(p, "id", None)}
+                    if keep_ids:
+                        retain(keep_ids)
+                        after = len(getattr(db, "programs", {}) or {})
+                        logger.info(
+                            "Soft reset pruned programs: %d -> %d (kept %d)",
+                            before,
+                            after,
+                            len(keep_ids),
+                        )
+                except Exception as e:
+                    logger.debug(f"Soft reset program pruning failed: {e}")
+
         # Reset crisis detector to start fresh analysis with new ontology
         self.crisis_detector.reset()
 
         # Update archive for new ontology (if it supports it)
-        if hasattr(self.archive, 'update_for_ontology'):
-            self.archive.update_for_ontology(new_ontology)
+        if hasattr(self.archive, "update_for_ontology"):
+            new_vars = new_ontology.metadata.get("new_variables", [])
+            self.archive.update_for_ontology(
+                ontology_generation=new_ontology.generation,
+                new_variables=new_vars,
+            )
 
         # Update problem context with new ontology
         if self.current_problem:
-            # Add ontology context to problem description
-            ontology_context = new_ontology.to_prompt_context()
-            if "ontology_context" not in (self.current_problem.metadata or {}):
-                if self.current_problem.metadata is None:
-                    self.current_problem.metadata = {}
-                self.current_problem.metadata["ontology_context"] = ontology_context
-                self.current_problem.metadata["ontology_id"] = new_ontology.id
-                self.current_problem.metadata["ontology_generation"] = new_ontology.generation
+            updated_problem = self.current_problem.update_for_ontology(
+                ontology_id=new_ontology.id,
+                ontology_generation=new_ontology.generation,
+                variable_names=new_ontology.get_variable_names(),
+                variable_descriptions={v.name: v.description for v in new_ontology.variables},
+            )
+            # Track and switch to updated problem context
+            self.problem_evolver.problem_history[updated_problem.id] = updated_problem
+            self.problem_evolver.current_problem = updated_problem
+            self.current_problem = updated_problem
 
         # Log the soft reset
-        self._log_event(DiscoveryEvent(
-            timestamp=time.time(),
-            event_type="soft_reset",
-            problem_id=self.current_problem.id if self.current_problem else "",
-            details={
-                "new_ontology_generation": new_ontology.generation,
-                "new_variables": [v.name for v in new_ontology.variables if v.source == "probe"],
-                "programs_kept": self.config.heisenberg_programs_to_keep,
-            },
-        ))
-
-        logger.info(
-            f"Soft reset complete. Ontology now at generation {new_ontology.generation}"
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="soft_reset",
+                problem_id=self.current_problem.id if self.current_problem else "",
+                details={
+                    "new_ontology_generation": new_ontology.generation,
+                    "new_variables": [
+                        v.name for v in new_ontology.variables if v.source == "probe"
+                    ],
+                    "programs_kept": self.config.heisenberg.programs_to_keep_on_reset,
+                },
+            )
         )
 
-    def _get_solution_characteristics(self) -> Dict[str, Any]:
-        """Get aggregate characteristics of successful solutions"""
+        logger.info(f"Soft reset complete. Ontology now at generation {new_ontology.generation}")
+
+    def _get_solution_characteristics(self, problem: ProblemSpace | None = None) -> dict[str, Any]:
+        """Get aggregate characteristics of successful solutions for a problem."""
         solutions = []
 
-        if self.current_problem:
-            for program_id in self.current_problem.solved_by:
+        target_problem = problem or self.current_problem
+        if target_problem:
+            for program_id in target_problem.solved_by:
                 program = self.openevolve.database.programs.get(program_id)
                 if program:
                     solutions.append(program)
@@ -599,21 +838,22 @@ class DiscoveryEngine:
         # Aggregate characteristics
         characteristics = {
             "num_solutions": len(solutions),
-            "avg_fitness": sum(
-                p.metrics.get("combined_score", 0) for p in solutions
-            ) / len(solutions),
+            "avg_fitness": sum(p.metrics.get("combined_score", 0) for p in solutions)
+            / len(solutions),
             "avg_complexity": sum(
                 p.metadata.get("phenotype", {}).get("complexity", 0) for p in solutions
-            ) / len(solutions),
-            "approaches": list(set(
-                p.metadata.get("phenotype", {}).get("approach_signature", "")
-                for p in solutions
-            )),
+            )
+            / len(solutions),
+            "approaches": list(
+                set(
+                    p.metadata.get("phenotype", {}).get("approach_signature", "") for p in solutions
+                )
+            ),
         }
 
         return characteristics
 
-    def get_curiosity_samples(self, n: int = 3) -> List["Program"]:
+    def get_curiosity_samples(self, n: int = 3) -> list["Program"]:
         """
         Get programs that maximize expected information gain.
 
@@ -629,6 +869,21 @@ class DiscoveryEngine:
             return self.current_problem.to_prompt_context()
         return ""
 
+    def get_problem_context_for_island(self, island_idx: int) -> str:
+        """Get problem context for a specific island (coevolution mode)."""
+        if self.problem_archive is not None:
+            prob = self.problem_archive.get_problem_for_island(island_idx)
+            if prob is not None:
+                return prob.to_prompt_context()
+        return self.get_current_problem_context()
+
+    def get_problem_id_for_island(self, island_idx: int) -> str | None:
+        if self.problem_archive is not None:
+            prob = self.problem_archive.get_problem_for_island(island_idx)
+            if prob is not None:
+                return prob.id
+        return self.current_problem.id if self.current_problem else None
+
     def _log_event(self, event: DiscoveryEvent) -> None:
         """Log a discovery event"""
         self.discovery_events.append(event)
@@ -636,18 +891,23 @@ class DiscoveryEngine:
         if self.config.log_discoveries and self.config.discovery_log_path:
             try:
                 os.makedirs(os.path.dirname(self.config.discovery_log_path), exist_ok=True)
-                with open(self.config.discovery_log_path, 'a') as f:
-                    f.write(json.dumps({
-                        "timestamp": event.timestamp,
-                        "type": event.event_type,
-                        "problem_id": event.problem_id,
-                        "program_id": event.program_id,
-                        "details": event.details,
-                    }) + "\n")
+                with open(self.config.discovery_log_path, "a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "timestamp": event.timestamp,
+                                "type": event.event_type,
+                                "problem_id": event.problem_id,
+                                "program_id": event.program_id,
+                                "details": event.details,
+                            }
+                        )
+                        + "\n"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to log discovery event: {e}")
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get discovery statistics"""
         stats = {
             **self.stats,
@@ -661,6 +921,22 @@ class DiscoveryEngine:
             "surprise_stats": self.archive.get_surprise_statistics(),
             "approach_diversity": self.archive.get_approach_diversity(),
         }
+
+        if self.problem_archive is not None:
+            ordered = sorted(self.problem_archive.records.values(), key=lambda r: r.created_at)
+            stats["active_problems"] = [
+                {
+                    "id": rec.problem.id,
+                    "parent_id": rec.problem.parent_id,
+                    "generation": rec.problem.generation,
+                    "difficulty": rec.problem.difficulty_level,
+                    "solutions": rec.solutions,
+                    "best_fitness": rec.best_fitness,
+                    "islands": rec.island_ids,
+                }
+                for rec in ordered
+            ]
+            stats["island_problem_map"] = dict(self.problem_archive.island_to_problem)
 
         # Add Heisenberg stats if enabled
         if self.ontology_manager is not None:
@@ -679,21 +955,44 @@ class DiscoveryEngine:
         # Save problem history
         self.problem_evolver.save(os.path.join(path, "problems.json"))
 
+        # Save co-evolution archive state if enabled
+        if self.problem_archive is not None:
+            archive_data = {
+                "records": {
+                    pid: {
+                        "best_fitness": rec.best_fitness,
+                        "solutions": rec.solutions,
+                        "last_improvement_iteration": rec.last_improvement_iteration,
+                        "island_ids": rec.island_ids,
+                        "created_at": rec.created_at,
+                    }
+                    for pid, rec in self.problem_archive.records.items()
+                },
+                "island_to_problem": dict(self.problem_archive.island_to_problem),
+                "current_problem_id": self.current_problem.id if self.current_problem else None,
+            }
+            with open(os.path.join(path, "problem_archive.json"), "w") as f:
+                json.dump(archive_data, f, indent=2)
+
         # Save events
-        with open(os.path.join(path, "events.json"), 'w') as f:
-            json.dump([
-                {
-                    "timestamp": e.timestamp,
-                    "type": e.event_type,
-                    "problem_id": e.problem_id,
-                    "program_id": e.program_id,
-                    "details": e.details,
-                }
-                for e in self.discovery_events
-            ], f, indent=2)
+        with open(os.path.join(path, "events.json"), "w") as f:
+            json.dump(
+                [
+                    {
+                        "timestamp": e.timestamp,
+                        "type": e.event_type,
+                        "problem_id": e.problem_id,
+                        "program_id": e.program_id,
+                        "details": e.details,
+                    }
+                    for e in self.discovery_events
+                ],
+                f,
+                indent=2,
+            )
 
         # Save statistics
-        with open(os.path.join(path, "stats.json"), 'w') as f:
+        with open(os.path.join(path, "stats.json"), "w") as f:
             json.dump(self.get_statistics(), f, indent=2)
 
         # Save Heisenberg state if enabled
@@ -717,7 +1016,7 @@ class DiscoveryEngine:
                     ],
                     "last_crisis_iteration": self.crisis_detector.last_crisis_iteration,
                 }
-                with open(os.path.join(heisenberg_path, "crisis_history.json"), 'w') as f:
+                with open(os.path.join(heisenberg_path, "crisis_history.json"), "w") as f:
                     json.dump(crisis_data, f, indent=2)
 
             # Save probe history
@@ -734,7 +1033,7 @@ class DiscoveryEngine:
                         for v in self.instrument_synthesizer.discovered_variables
                     ],
                 }
-                with open(os.path.join(heisenberg_path, "probe_history.json"), 'w') as f:
+                with open(os.path.join(heisenberg_path, "probe_history.json"), "w") as f:
                     json.dump(probe_data, f, indent=2)
 
             logger.info(f"Saved Heisenberg state to {heisenberg_path}")
@@ -749,10 +1048,38 @@ class DiscoveryEngine:
             self.problem_evolver.load(problems_path)
             self.current_problem = self.problem_evolver.current_problem
 
+        # Load archive state if coevolution enabled
+        archive_path = os.path.join(path, "problem_archive.json")
+        if os.path.exists(archive_path) and self.problem_archive is not None:
+            with open(archive_path) as f:
+                archive_data = json.load(f)
+
+            # Rebuild archive records from problem history
+            self.problem_archive.records.clear()
+            for pid, rec_data in archive_data.get("records", {}).items():
+                prob = self.problem_evolver.problem_history.get(pid)
+                if prob is None:
+                    continue
+                self.problem_archive.add_problem(prob)
+                rec = self.problem_archive.records[pid]
+                rec.best_fitness = float(rec_data.get("best_fitness", 0.0))
+                rec.solutions = int(rec_data.get("solutions", len(prob.solved_by)))
+                rec.last_improvement_iteration = int(rec_data.get("last_improvement_iteration", 0))
+                rec.island_ids = list(rec_data.get("island_ids", []))
+                rec.created_at = float(rec_data.get("created_at", time.time()))
+
+            self.problem_archive.island_to_problem = {
+                int(k): v for k, v in archive_data.get("island_to_problem", {}).items()
+            }
+
+            current_pid = archive_data.get("current_problem_id")
+            if current_pid and current_pid in self.problem_evolver.problem_history:
+                self.current_problem = self.problem_evolver.problem_history[current_pid]
+
         # Load events
         events_path = os.path.join(path, "events.json")
         if os.path.exists(events_path):
-            with open(events_path, 'r') as f:
+            with open(events_path) as f:
                 events_data = json.load(f)
                 self.discovery_events = [
                     DiscoveryEvent(
@@ -776,10 +1103,12 @@ class DiscoveryEngine:
             # Load crisis history
             crisis_path = os.path.join(heisenberg_path, "crisis_history.json")
             if os.path.exists(crisis_path) and self.crisis_detector is not None:
-                with open(crisis_path, 'r') as f:
+                with open(crisis_path) as f:
                     crisis_data = json.load(f)
                     self.crisis_detector.fitness_history = crisis_data.get("fitness_history", [])
-                    self.crisis_detector.last_crisis_iteration = crisis_data.get("last_crisis_iteration", 0)
+                    self.crisis_detector.last_crisis_iteration = crisis_data.get(
+                        "last_crisis_iteration", 0
+                    )
                     # Restore crisis history
                     self.crisis_detector.crisis_history = [
                         EpistemicCrisis.from_dict(c) for c in crisis_data.get("crisis_history", [])
@@ -788,9 +1117,11 @@ class DiscoveryEngine:
             # Load probe history
             probe_path = os.path.join(heisenberg_path, "probe_history.json")
             if os.path.exists(probe_path) and self.instrument_synthesizer is not None:
-                with open(probe_path, 'r') as f:
+                with open(probe_path) as f:
                     probe_data = json.load(f)
-                    self.instrument_synthesizer.executed_probes = probe_data.get("executed_probes", 0)
+                    self.instrument_synthesizer.executed_probes = probe_data.get(
+                        "executed_probes", 0
+                    )
                     # Note: discovered_variables are derived from ontology, don't reload
 
             logger.info(f"Loaded Heisenberg state from {heisenberg_path}")
@@ -802,7 +1133,7 @@ class DiscoveryEngine:
 def create_discovery_engine(
     openevolve: "OpenEvolve",
     problem_description: str,
-    config: Optional[DiscoveryConfig] = None,
+    config: DiscoveryConfig | None = None,
 ) -> DiscoveryEngine:
     """
     Create a DiscoveryEngine and attach it to an OpenEvolve instance.

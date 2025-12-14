@@ -28,7 +28,7 @@ prompt:
     **DATA CHARACTERISTICS**
     - Features: [non_vocab_parameters, vocab_size, num_characters] - 3D input
     - Labels: unigram_normalized_loss - scalar output
-    - Dataset size: 1080 
+    - Dataset size: 1080
     - Vocabulary size: 4096 to 96256 tokens (8 distinct sizes)
     - Embedding dimension: 512 to 2048 dimensions (4 values)
     - Character count: 1e8 to 5e12 characters (100M to 5T characters)

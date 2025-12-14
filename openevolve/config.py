@@ -3,14 +3,12 @@ Configuration handling for OpenEvolve
 """
 
 import os
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 import yaml
-
-if TYPE_CHECKING:
-    from openevolve.llm.base import LLMInterface
 
 
 @dataclass
@@ -19,17 +17,17 @@ class LLMModelConfig:
 
     # API configuration
     api_base: str = None
-    api_key: Optional[str] = None
+    api_key: str | None = None
     name: str = None
 
     # Custom LLM client
-    init_client: Optional[Callable] = None
+    init_client: Callable | None = None
 
     # Weight for model in ensemble
     weight: float = 1.0
 
     # Generation parameters
-    system_message: Optional[str] = None
+    system_message: str | None = None
     temperature: float = None
     top_p: float = None
     max_tokens: int = None
@@ -40,10 +38,10 @@ class LLMModelConfig:
     retry_delay: int = None
 
     # Reproducibility
-    random_seed: Optional[int] = None
+    random_seed: int | None = None
 
     # Reasoning parameters
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -54,7 +52,7 @@ class LLMConfig(LLMModelConfig):
     api_base: str = "https://api.openai.com/v1"
 
     # Generation parameters
-    system_message: Optional[str] = "system_message"
+    system_message: str | None = "system_message"
     temperature: float = 0.7
     top_p: float = 0.95
     max_tokens: int = 4096
@@ -65,10 +63,10 @@ class LLMConfig(LLMModelConfig):
     retry_delay: int = 5
 
     # n-model configuration for evolution LLM ensemble
-    models: List[LLMModelConfig] = field(default_factory=list)
+    models: list[LLMModelConfig] = field(default_factory=list)
 
     # n-model configuration for evaluator LLM ensemble
-    evaluator_models: List[LLMModelConfig] = field(default_factory=lambda: [])
+    evaluator_models: list[LLMModelConfig] = field(default_factory=lambda: [])
 
     # Backwardes compatibility with primary_model(_weight) options
     primary_model: str = None
@@ -77,7 +75,7 @@ class LLMConfig(LLMModelConfig):
     secondary_model_weight: float = None
 
     # Reasoning parameters (inherited from LLMModelConfig but can be overridden)
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
 
     def __post_init__(self):
         """Post-initialization to set up model configurations"""
@@ -134,7 +132,7 @@ class LLMConfig(LLMModelConfig):
         }
         self.update_model_params(shared_config)
 
-    def update_model_params(self, args: Dict[str, Any], overwrite: bool = False) -> None:
+    def update_model_params(self, args: dict[str, Any], overwrite: bool = False) -> None:
         """Update model parameters for all models"""
         for model in self.models + self.evaluator_models:
             for key, value in args.items():
@@ -189,10 +187,65 @@ class LLMConfig(LLMModelConfig):
 
 
 @dataclass
+class MetaPromptConfig:
+    """Configuration for meta-prompting system - evolving prompt strategies
+
+    Meta-prompting enables OpenEvolve to learn which prompt strategies lead to
+    fitness improvements and adapt selection probabilities using multi-armed
+    bandit algorithms.
+    """
+
+    # Feature flag
+    enabled: bool = False
+
+    # Strategy selection algorithm
+    # - "thompson_sampling": Bayesian approach, good exploration-exploitation balance
+    # - "ucb": Upper Confidence Bound, deterministic exploration
+    # - "epsilon_greedy": Simple random exploration with probability epsilon
+    selection_algorithm: str = "thompson_sampling"
+
+    # Algorithm-specific parameters
+    ucb_exploration_constant: float = 2.0  # C in UCB formula: mean + C * sqrt(log(n)/n_i)
+    epsilon: float = 0.1  # For epsilon-greedy: probability of random exploration
+    thompson_prior_alpha: float = 1.0  # Beta distribution prior (successes)
+    thompson_prior_beta: float = 1.0  # Beta distribution prior (failures)
+
+    # Reward calculation
+    # - "improvement": Raw fitness delta (child - parent)
+    # - "normalized": Delta normalized by parent fitness
+    # - "rank": Binary 1.0 if improved, 0.0 otherwise
+    reward_type: str = "improvement"
+    improvement_threshold: float = 0.0  # Minimum delta for positive reward
+    reward_decay: float = 0.99  # Exponential decay for old observations
+
+    # Blending with base prompt
+    meta_prompt_weight: float = 0.1  # Weight of meta-prompt in final prompt
+    # - "prefix": Add before user prompt
+    # - "suffix": Add after user prompt
+    # - "section": Insert as dedicated section (recommended)
+    meta_prompt_position: str = "section"
+
+    # Strategy granularity
+    per_island_strategies: bool = True  # Track strategies per island
+    context_aware: bool = True  # Adapt based on fitness range, generation, etc.
+
+    # Exploration vs exploitation over time
+    exploration_decay: float = 0.995  # Reduce exploration over iterations
+    min_exploration: float = 0.05  # Minimum exploration rate
+
+    # History and persistence
+    max_history_per_strategy: int = 1000  # Cap history to prevent memory bloat
+    warmup_iterations: int = 50  # Random selection during warmup
+
+    # Custom strategies file (optional)
+    strategies_file: str | None = None  # Path to custom meta_fragments.json
+
+
+@dataclass
 class PromptConfig:
     """Configuration for prompt generation"""
 
-    template_dir: Optional[str] = None
+    template_dir: str | None = None
     system_message: str = "system_message"
     evaluator_system_message: str = "evaluator_system_message"
 
@@ -202,12 +255,10 @@ class PromptConfig:
 
     # Template stochasticity
     use_template_stochasticity: bool = True
-    template_variations: Dict[str, List[str]] = field(default_factory=dict)
+    template_variations: dict[str, list[str]] = field(default_factory=dict)
 
-    # Meta-prompting
-    # Note: meta-prompting features not implemented
-    use_meta_prompting: bool = False
-    meta_prompt_weight: float = 0.1
+    # Meta-prompting configuration
+    meta_prompting: MetaPromptConfig = field(default_factory=MetaPromptConfig)
 
     # Artifact rendering
     include_artifacts: bool = True
@@ -215,23 +266,21 @@ class PromptConfig:
     artifact_security_filter: bool = True
 
     # Feature extraction and program labeling
-    suggest_simplification_after_chars: Optional[int] = (
+    suggest_simplification_after_chars: int | None = (
         500  # Suggest simplifying if program exceeds this many characters
     )
-    include_changes_under_chars: Optional[int] = (
+    include_changes_under_chars: int | None = (
         100  # Include change descriptions in features if under this length
     )
-    concise_implementation_max_lines: Optional[int] = (
+    concise_implementation_max_lines: int | None = (
         10  # Label as "concise" if program has this many lines or fewer
     )
-    comprehensive_implementation_min_lines: Optional[int] = (
+    comprehensive_implementation_min_lines: int | None = (
         50  # Label as "comprehensive" if program has this many lines or more
     )
 
     # Backward compatibility - deprecated
-    code_length_threshold: Optional[int] = (
-        None  # Deprecated: use suggest_simplification_after_chars
-    )
+    code_length_threshold: int | None = None  # Deprecated: use suggest_simplification_after_chars
 
 
 @dataclass
@@ -239,7 +288,7 @@ class DatabaseConfig:
     """Configuration for the program database"""
 
     # General settings
-    db_path: Optional[str] = None  # Path to store database on disk
+    db_path: str | None = None  # Path to store database on disk
     in_memory: bool = True
 
     # Prompt and response logging to programs/<id>.json
@@ -249,7 +298,7 @@ class DatabaseConfig:
     population_size: int = 1000
     archive_size: int = 100
     num_islands: int = 5
-    programs_per_island: Optional[int] = None
+    programs_per_island: int | None = None
 
     # Selection parameters
     elite_selection_ratio: float = 0.1
@@ -263,7 +312,7 @@ class DatabaseConfig:
     # CRITICAL: For custom dimensions, evaluators must return RAW VALUES, not bin indices
     # Built-in: "complexity", "diversity", "score" (always available)
     # Custom: Any metric from your evaluator (must be continuous values)
-    feature_dimensions: List[str] = field(
+    feature_dimensions: list[str] = field(
         default_factory=lambda: ["complexity", "diversity"],
         metadata={
             "help": "List of feature dimensions for MAP-Elites grid. "
@@ -273,7 +322,7 @@ class DatabaseConfig:
             "NOT pre-computed bin indices. OpenEvolve handles all scaling and binning internally."
         },
     )
-    feature_bins: Union[int, Dict[str, int]] = 10  # Can be int (all dims) or dict (per-dim)
+    feature_bins: int | dict[str, int] = 10  # Can be int (all dims) or dict (per-dim)
     diversity_reference_size: int = 20  # Size of reference set for diversity calculation
 
     # Migration parameters for island-based evolution
@@ -281,17 +330,26 @@ class DatabaseConfig:
     migration_rate: float = 0.1  # Fraction of population to migrate
 
     # Random seed for reproducible sampling
-    random_seed: Optional[int] = 42
+    random_seed: int | None = 42
 
     # Artifact storage
-    artifacts_base_path: Optional[str] = None  # Defaults to db_path/artifacts
+    artifacts_base_path: str | None = None  # Defaults to db_path/artifacts
     artifact_size_threshold: int = 32 * 1024  # 32KB threshold
     cleanup_old_artifacts: bool = True
     artifact_retention_days: int = 30
 
-    novelty_llm: Optional["LLMInterface"] = None
-    embedding_model: Optional[str] = None
+    embedding_model: str | None = None
     similarity_threshold: float = 0.99
+
+
+def _clear_legacy_llm_fields(llm_dict: dict[str, Any]) -> dict[str, Any]:
+    """Prevent LLMConfig __post_init__ from duplicating models during roundtrips."""
+    llm_dict = dict(llm_dict)
+    llm_dict["primary_model"] = None
+    llm_dict["primary_model_weight"] = None
+    llm_dict["secondary_model"] = None
+    llm_dict["secondary_model_weight"] = None
+    return llm_dict
 
 
 @dataclass
@@ -304,12 +362,18 @@ class EvaluatorConfig:
 
     # Resource limits for evaluation
     # Note: resource limits not implemented
-    memory_limit_mb: Optional[int] = None
-    cpu_limit: Optional[float] = None
+    memory_limit_mb: int | None = None
+    cpu_limit: float | None = None
 
     # Evaluation strategies
     cascade_evaluation: bool = True
-    cascade_thresholds: List[float] = field(default_factory=lambda: [0.5, 0.75, 0.9])
+    cascade_thresholds: list[float] = field(default_factory=lambda: [0.5, 0.75, 0.9])
+
+    # Compute-budgeted cascade: cap max stage based on parent fitness.
+    budgeted_cascade_enabled: bool = False
+    budget_stage3_parent_threshold: float = 0.6
+    budget_max_stage_low: int = 2
+    budget_max_stage_high: int = 3
 
     # Parallel evaluation
     parallel_evaluations: int = 1
@@ -333,9 +397,119 @@ class EvolutionTraceConfig:
     format: str = "jsonl"  # Options: "jsonl", "json", "hdf5"
     include_code: bool = False
     include_prompts: bool = True
-    output_path: Optional[str] = None
+    output_path: str | None = None
     buffer_size: int = 10
     compress: bool = False
+
+
+@dataclass
+class RLRewardConfig:
+    """Configuration for RL reward calculation"""
+
+    # Reward component weights (should sum to ~1.0)
+    fitness_weight: float = 0.6  # Weight for fitness improvement
+    diversity_weight: float = 0.2  # Weight for diversity maintenance
+    novelty_weight: float = 0.1  # Weight for behavioral novelty
+    efficiency_weight: float = 0.1  # Weight for efficiency (fewer iterations to improve)
+
+    # Reward shaping
+    improvement_threshold: float = 0.0  # Minimum improvement for positive reward
+    plateau_penalty: float = 0.1  # Penalty per N iterations without improvement
+    plateau_window: int = 50  # Iterations to consider for plateau detection
+
+
+@dataclass
+class RLNeuralConfig:
+    """Configuration for neural network-based policy (optional)"""
+
+    hidden_dim: int = 64  # Hidden layer dimension
+    num_layers: int = 2  # Number of hidden layers
+    batch_size: int = 32  # Batch size for training
+    replay_buffer_size: int = 10000  # Experience replay buffer size
+    learning_rate: float = 1e-3  # Learning rate for neural network
+    target_update_freq: int = 100  # Frequency to update target network
+
+
+@dataclass
+class RLConfig:
+    """Configuration for RL-based adaptive selection
+
+    The RL system learns optimal selection policies during evolution,
+    adapting exploration/exploitation trade-offs based on the current
+    state of evolution. It complements meta-prompting: RL handles
+    "what to select", meta-prompting handles "how to prompt".
+    """
+
+    # Feature flag
+    enabled: bool = False
+
+    # Algorithm selection
+    # - "contextual_thompson": Bayesian contextual bandit with Thompson Sampling (recommended)
+    # - "contextual_ucb": Contextual UCB algorithm
+    # - "neural_bandit": Neural network-based contextual bandit (requires more data)
+    # - "epsilon_greedy": Simple epsilon-greedy (baseline)
+    algorithm: str = "contextual_thompson"
+
+    # State features to observe
+    # Available features:
+    # - "normalized_iteration": Current iteration / max iterations
+    # - "best_fitness": Best fitness so far (normalized)
+    # - "mean_fitness": Population mean fitness
+    # - "fitness_std": Population fitness standard deviation
+    # - "fitness_improvement_rate": Recent improvement rate
+    # - "population_diversity": Edit distance diversity
+    # - "archive_coverage": MAP-Elites grid coverage fraction
+    # - "generations_without_improvement": Stagnation indicator
+    # - "recent_exploration_success": Success rate of exploration actions
+    # - "recent_exploitation_success": Success rate of exploitation actions
+    # - "island_variance": Variance between island fitnesses
+    state_features: list[str] = field(
+        default_factory=lambda: [
+            "normalized_iteration",
+            "best_fitness",
+            "fitness_improvement_rate",
+            "population_diversity",
+            "archive_coverage",
+            "generations_without_improvement",
+            "recent_exploration_success",
+            "recent_exploitation_success",
+        ]
+    )
+
+    # Reward configuration
+    reward: RLRewardConfig = field(default_factory=RLRewardConfig)
+
+    # Learning parameters
+    learning_rate: float = 0.01  # For Bayesian updates
+    discount_factor: float = 0.99  # For temporal credit assignment
+    exploration_bonus: float = 2.0  # UCB exploration constant
+
+    # Warmup and exploration
+    warmup_iterations: int = 100  # Random policy during warmup
+    exploration_decay: float = 0.995  # Decay rate for exploration
+    min_exploration: float = 0.05  # Minimum exploration probability
+
+    # Action tracking for credit assignment
+    action_history_size: int = 100  # How many recent actions to track per type
+    success_window: int = 20  # Window for computing success rates
+
+    # Offline training
+    pretrain_from_traces: bool = False  # Pre-train from historical traces
+    trace_path: str | None = None  # Path to evolution traces for pre-training
+
+    # Extended action control (optional)
+    control_temperature: bool = False  # Also learn temperature adjustment
+    control_diff_mode: bool = False  # Also learn diff vs full rewrite decision
+    temperature_range: tuple[float, float] = (0.3, 1.0)  # Temperature bounds
+
+    # Neural bandit specific (only used if algorithm="neural_bandit")
+    neural: RLNeuralConfig = field(default_factory=RLNeuralConfig)
+
+    # Per-island learning
+    per_island_policies: bool = True  # Separate policy per island
+
+    # Checkpoint and persistence
+    save_detailed_stats: bool = True  # Save detailed action statistics
 
 
 @dataclass
@@ -345,6 +519,11 @@ class SkepticConfig:
     # Attack configuration
     num_attack_rounds: int = 3  # Number of adversarial rounds per hypothesis
     attack_timeout: float = 30.0  # Timeout per attack in seconds
+
+    # Adaptive budget: scale attack rounds with fitness.
+    adaptive_attack_rounds: bool = False
+    min_attack_rounds: int = 1
+    max_attack_rounds: int | None = None  # Defaults to num_attack_rounds
 
     # Attack type probabilities
     edge_case_prob: float = 0.4  # Edge case inputs (empty, null, huge)
@@ -357,11 +536,32 @@ class SkepticConfig:
     max_memory_mb: int = 512  # Memory limit for execution
     max_output_size: int = 10000  # Max output characters to capture
 
+    # Remote execution settings (for code requiring GPU/special deps)
+    remote_execution: bool = False  # Execute attacks on remote host via SSH
+    remote_host: str | None = None  # SSH host (e.g., "user@host")
+    remote_python: str | None = (
+        None  # Python interpreter on remote (e.g., "/path/to/venv/bin/python")
+    )
+    remote_work_dir: str = "/tmp/openevolve_skeptic"  # Working directory on remote
+
+    # Dependency detection - skip execution if imports can't be satisfied
+    skip_missing_deps: bool = True  # Skip execution if required imports missing locally
+    required_imports_for_remote: list[str] | None = (
+        None  # Imports that trigger remote execution (e.g., ["torch"])
+    )
+
     # Static analysis settings
     static_analysis_enabled: bool = True  # Check for dangerous patterns (eval, exec, etc.)
 
     # Reproduction settings
     enable_blind_reproduction: bool = False  # Whether to use blind reproduction test
+
+    # Optional function entrypoint to target in adversarial attacks.
+    # If set, the skeptic will call this function instead of guessing.
+    entrypoint: str | None = None
+
+    # Optional task-specific skeptic plugins.
+    plugins: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -421,6 +621,24 @@ class DiscoveryConfig:
     problem_evolution_enabled: bool = True
     evolve_problem_after_solutions: int = 5  # Evolve problem after N successful solutions
 
+    # Paired open-ended co-evolution (POET-style)
+    coevolution_enabled: bool = False  # Maintain multiple active problems
+    max_active_problems: int = 5  # Max concurrent problems when coevolution enabled
+    novelty_threshold: float = 0.15  # Gate new problems by novelty
+    min_problem_difficulty: float = 0.5
+    max_problem_difficulty: float = 10.0
+    min_islands_per_problem: int = 1  # Keep at least N islands per active problem
+
+    # Minimal-criterion transfer screening for new problems (coevolution only).
+    # A candidate is admitted only if existing solvers achieve:
+    #   min_transfer_fitness <= best_transfer_fitness < max_transfer_fitness.
+    transfer_trial_programs: int = 3  # How many top solvers to test on candidate
+    min_transfer_fitness: float = 0.3  # Too hard if best transfer below this
+    max_transfer_fitness: float | None = (
+        None  # Too easy if best transfer >= this (defaults to solution_threshold)
+    )
+    transfer_max_stage: int = 2  # Max cascade stage to use for screening (1/2/3)
+
     # Adversarial skeptic settings
     skeptic_enabled: bool = True
     skeptic: SkepticConfig = field(default_factory=SkepticConfig)
@@ -428,9 +646,9 @@ class DiscoveryConfig:
     # Epistemic archive settings
     surprise_tracking_enabled: bool = True
     curiosity_sampling_enabled: bool = True
-    phenotype_dimensions: List[str] = field(
-        default_factory=lambda: ["complexity", "efficiency"]
-    )
+    phenotype_dimensions: list[str] = field(default_factory=lambda: ["complexity", "efficiency"])
+    # Optional phenotype dimensions to mirror into program metrics for MAP-Elites.
+    phenotype_feature_dimensions: list[str] = field(default_factory=list)
 
     # Thresholds
     solution_threshold: float = 0.8  # Fitness threshold to consider problem "solved"
@@ -438,7 +656,7 @@ class DiscoveryConfig:
 
     # Logging
     log_discoveries: bool = True
-    discovery_log_path: Optional[str] = None  # Defaults to output_dir/discovery_log.jsonl
+    discovery_log_path: str | None = None  # Defaults to output_dir/discovery_log.jsonl
 
     # Heisenberg Engine (Ontological Expansion)
     heisenberg: HeisenbergConfig = field(default_factory=HeisenbergConfig)
@@ -452,8 +670,8 @@ class Config:
     max_iterations: int = 10000
     checkpoint_interval: int = 100
     log_level: str = "INFO"
-    log_dir: Optional[str] = None
-    random_seed: Optional[int] = 42
+    log_dir: str | None = None
+    random_seed: int | None = 42
     language: str = None
     file_suffix: str = ".py"
 
@@ -463,6 +681,7 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     evaluator: EvaluatorConfig = field(default_factory=EvaluatorConfig)
     evolution_trace: EvolutionTraceConfig = field(default_factory=EvolutionTraceConfig)
+    rl: RLConfig = field(default_factory=RLConfig)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
 
     # Evolution settings
@@ -470,28 +689,36 @@ class Config:
     max_code_length: int = 10000
 
     # Early stopping settings
-    early_stopping_patience: Optional[int] = None
+    early_stopping_patience: int | None = None
     convergence_threshold: float = 0.001
     early_stopping_metric: str = "combined_score"
 
     # Parallel controller settings
-    max_tasks_per_child: Optional[int] = None
+    max_tasks_per_child: int | None = None
 
     @classmethod
-    def from_yaml(cls, path: Union[str, Path]) -> "Config":
+    def from_yaml(cls, path: str | Path) -> "Config":
         """Load configuration from a YAML file"""
-        with open(path, "r") as f:
+        with open(path) as f:
             config_dict = yaml.safe_load(f)
         return cls.from_dict(config_dict)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "Config":
+    def from_dict(cls, config_dict: dict[str, Any]) -> "Config":
         """Create configuration from a dictionary"""
         # Handle nested configurations
         config = Config()
 
         # List of nested config keys to skip in top-level processing
-        nested_keys = ["llm", "prompt", "database", "evaluator", "evolution_trace", "discovery"]
+        nested_keys = [
+            "llm",
+            "prompt",
+            "database",
+            "evaluator",
+            "evolution_trace",
+            "rl",
+            "discovery",
+        ]
 
         # Update top-level fields
         for key, value in config_dict.items():
@@ -509,7 +736,11 @@ class Config:
                 ]
             config.llm = LLMConfig(**llm_dict)
         if "prompt" in config_dict:
-            config.prompt = PromptConfig(**config_dict["prompt"])
+            prompt_dict = config_dict["prompt"].copy()
+            # Handle nested meta_prompting config
+            if "meta_prompting" in prompt_dict:
+                prompt_dict["meta_prompting"] = MetaPromptConfig(**prompt_dict["meta_prompting"])
+            config.prompt = PromptConfig(**prompt_dict)
         if "database" in config_dict:
             config.database = DatabaseConfig(**config_dict["database"])
 
@@ -520,6 +751,17 @@ class Config:
             config.evaluator = EvaluatorConfig(**config_dict["evaluator"])
         if "evolution_trace" in config_dict:
             config.evolution_trace = EvolutionTraceConfig(**config_dict["evolution_trace"])
+
+        # Handle RL config
+        if "rl" in config_dict:
+            rl_dict = config_dict["rl"].copy()
+            # Handle nested reward config
+            if "reward" in rl_dict:
+                rl_dict["reward"] = RLRewardConfig(**rl_dict["reward"])
+            # Handle nested neural config
+            if "neural" in rl_dict:
+                rl_dict["neural"] = RLNeuralConfig(**rl_dict["neural"])
+            config.rl = RLConfig(**rl_dict)
 
         # Handle discovery config
         if "discovery" in config_dict:
@@ -534,16 +776,28 @@ class Config:
 
         return config
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    def to_yaml(self, path: Union[str, Path]) -> None:
+    def to_worker_dict(self) -> dict[str, Any]:
+        """Serialize config for multiprocessing worker initialization."""
+        data = asdict(self)
+        llm_dict = data.get("llm") or {}
+        data["llm"] = _clear_legacy_llm_fields(llm_dict)
+        return data
+
+    @classmethod
+    def from_worker_dict(cls, data: dict[str, Any]) -> "Config":
+        """Reconstruct a Config from `to_worker_dict` output."""
+        return cls.from_dict(data)
+
+    def to_yaml(self, path: str | Path) -> None:
         """Save configuration to a YAML file"""
         with open(path, "w") as f:
             yaml.dump(self.to_dict(), f, default_flow_style=False)
 
 
-def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
+def load_config(config_path: str | Path | None = None) -> Config:
     """Load configuration from a YAML file or use defaults"""
     if config_path and os.path.exists(config_path):
         config = Config.from_yaml(config_path)

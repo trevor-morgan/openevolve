@@ -33,7 +33,7 @@ jobs:
         run: |
           # Run unit tests (all tests except integration/)
           python -m unittest discover -s tests -p "test_*.py" -v
-          
+
   integration-tests:
     needs: unit-tests  # Only run if unit tests pass
     runs-on: ubuntu-latest
@@ -66,11 +66,11 @@ jobs:
           echo "Starting optillm server for integration tests..."
           OPTILLM_API_KEY=optillm HF_TOKEN=${{ secrets.HF_TOKEN }} optillm --model google/gemma-3-270m-it --port 8000 &
           echo $! > server.pid
-          
+
           # Wait for server to be ready
           echo "Waiting for server to start..."
           sleep 15
-          
+
           # Test server health
           curl -s http://localhost:8000/health || echo "Server health check failed"
         env:
@@ -85,7 +85,7 @@ jobs:
         run: |
           # Run only fast integration tests, skip slow tests that require real LLM
           pytest tests/integration -v --tb=short -m "not slow"
-          
+
       - name: Stop optillm server
         if: always()
         run: |

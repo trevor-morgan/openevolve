@@ -7,10 +7,9 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Dict, List, Optional
 
 from openevolve import OpenEvolve
-from openevolve.config import Config, load_config
+from openevolve.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +18,16 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(description="OpenEvolve - Evolutionary coding agent")
 
-    parser.add_argument("initial_program", help="Path to the initial program file")
+    parser.add_argument(
+        "initial_program",
+        nargs="?",
+        help="Path to the initial program file (omit when using --init-from-prompt)",
+    )
 
     parser.add_argument(
-        "evaluation_file", help="Path to the evaluation file containing an 'evaluate' function"
+        "evaluation_file",
+        nargs="?",
+        help="Path to the evaluation file containing an 'evaluate' function (omit when using --init-from-prompt)",
     )
 
     parser.add_argument("--config", "-c", help="Path to configuration file (YAML)", default=None)
@@ -90,6 +95,55 @@ def parse_args() -> argparse.Namespace:
         default=None,
     )
 
+    parser.add_argument(
+        "--hot-reload",
+        action="store_true",
+        help="Hot-reload a small set of config knobs from --config while running (timeouts).",
+    )
+
+    parser.add_argument(
+        "--hot-reload-interval",
+        type=float,
+        default=2.0,
+        help="Config hot-reload polling interval in seconds (default: 2.0).",
+    )
+
+    parser.add_argument(
+        "--init-from-prompt",
+        help="Create a new project skeleton from a short prompt (writes initial_program.py, evaluator.py, config.yaml).",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--init-dir",
+        help="Directory to create the project in (default: ./<slug-from-prompt>).",
+        default=".",
+    )
+
+    parser.add_argument(
+        "--init-name",
+        help="Project name (used for directory slug; defaults to first line of prompt).",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--init-entrypoint",
+        help="Entrypoint function name in the generated program (default: solve).",
+        default="solve",
+    )
+
+    parser.add_argument(
+        "--init-test-cases",
+        help="Path to a JSON file of test cases (list of {input, output}). If omitted, a minimal template is created.",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--init-force",
+        action="store_true",
+        help="Overwrite existing files in the init directory.",
+    )
+
     return parser.parse_args()
 
 
@@ -102,12 +156,47 @@ async def main_async() -> int:
     """
     args = parse_args()
 
+    if args.init_from_prompt:
+        from pathlib import Path
+
+        from openevolve.init_project import init_project
+
+        test_cases = None
+        if args.init_test_cases:
+            import json
+
+            test_cases_path = Path(args.init_test_cases).expanduser()
+            test_cases = json.loads(test_cases_path.read_text(encoding="utf-8"))
+
+        result = init_project(
+            prompt=args.init_from_prompt,
+            init_dir=args.init_dir,
+            project_name=args.init_name,
+            entrypoint=args.init_entrypoint,
+            test_cases=test_cases,
+            force=bool(args.init_force),
+        )
+
+        print("Initialized OpenEvolve project:")
+        print(f"  Directory: {result.project_dir}")
+        print(f"  Program:   {result.initial_program_path}")
+        print(f"  Evaluator: {result.evaluator_path}")
+        print(f"  Config:    {result.config_path}")
+        print(f"  Tests:     {result.test_cases_path}")
+        print("")
+        print("Next:")
+        print(f"  Edit {result.test_cases_path} to add grounded test cases")
+        print(
+            f"  Run: ./.venv/bin/openevolve-run {result.initial_program_path} {result.evaluator_path} --config {result.config_path} --iterations 50"
+        )
+        return 0
+
     # Check if files exist
-    if not os.path.exists(args.initial_program):
+    if not args.initial_program or not os.path.exists(args.initial_program):
         print(f"Error: Initial program file '{args.initial_program}' not found")
         return 1
 
-    if not os.path.exists(args.evaluation_file):
+    if not args.evaluation_file or not os.path.exists(args.evaluation_file):
         print(f"Error: Evaluation file '{args.evaluation_file}' not found")
         return 1
 
@@ -132,9 +221,9 @@ async def main_async() -> int:
         # Rebuild models list to apply CLI overrides
         if args.primary_model or args.secondary_model:
             config.llm.rebuild_models()
-            print(f"Applied CLI model overrides - active models:")
+            print("Applied CLI model overrides - active models:")
             for i, model in enumerate(config.llm.models):
-                print(f"  Model {i+1}: {model.name} (weight: {model.weight})")
+                print(f"  Model {i + 1}: {model.name} (weight: {model.weight})")
 
     # Apply discovery mode CLI overrides
     if args.discovery:
@@ -165,6 +254,9 @@ async def main_async() -> int:
             evaluation_file=args.evaluation_file,
             config=config,
             output_dir=args.output,
+            config_path=args.config,
+            hot_reload=bool(args.hot_reload),
+            hot_reload_interval=float(args.hot_reload_interval),
         )
 
         # Load from checkpoint if specified
@@ -203,8 +295,8 @@ async def main_async() -> int:
                     checkpoints, key=lambda x: int(x.split("_")[-1]) if "_" in x else 0
                 )[-1]
 
-        print(f"\nEvolution complete!")
-        print(f"Best program metrics:")
+        print("\nEvolution complete!")
+        print("Best program metrics:")
         for name, value in best_program.metrics.items():
             # Handle mixed types: format numbers as floats, others as strings
             if isinstance(value, (int, float)):
@@ -219,7 +311,7 @@ async def main_async() -> int:
         return 0
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {e!s}")
         import traceback
 
         traceback.print_exc()

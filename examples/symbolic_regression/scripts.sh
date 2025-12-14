@@ -9,10 +9,10 @@ declare -A split_counts=(
 )
 
 declare -A split_problem_dir_prefixes=(
-    ["bio_pop_growth"]="BPG"  
-    ["chem_react"]="CRK"       
-    ["matsci"]="MatSci"           
-    ["phys_osc"]="PO"         
+    ["bio_pop_growth"]="BPG"
+    ["chem_react"]="CRK"
+    ["matsci"]="MatSci"
+    ["phys_osc"]="PO"
 )
 
 base_problems_dir="./problems"

@@ -6,14 +6,12 @@ import asyncio
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-import time
-from concurrent.futures import Future
+from unittest.mock import MagicMock, patch
 
 # Set dummy API key for testing
 os.environ["OPENAI_API_KEY"] = "test"
 
-from openevolve.config import Config, DatabaseConfig, EvaluatorConfig, LLMConfig, PromptConfig
+from openevolve.config import Config
 from openevolve.database import Program, ProgramDatabase
 from openevolve.process_parallel import ProcessParallelController, SerializableResult
 
@@ -85,20 +83,28 @@ def evaluate(program_path):
         self.assertTrue(controller.shutdown_event.is_set())
 
     def test_database_snapshot_creation(self):
-        """Test creating database snapshot for workers"""
+        """Test creating lightweight snapshot for workers"""
         controller = ProcessParallelController(self.config, self.eval_file, self.database)
 
-        snapshot = controller._create_database_snapshot()
+        parent = self.database.get("test_0")
+        self.assertIsNotNone(parent)
+        snapshot = controller._create_iteration_snapshot(parent, [], island_idx=0)
 
         # Verify snapshot structure
-        self.assertIn("programs", snapshot)
-        self.assertIn("islands", snapshot)
-        self.assertIn("current_island", snapshot)
-        self.assertIn("artifacts", snapshot)
+        self.assertIn("parent", snapshot)
+        self.assertIn("top_programs", snapshot)
+        self.assertIn("previous_programs", snapshot)
+        self.assertIn("inspirations", snapshot)
+        self.assertIn("program_artifacts", snapshot)
 
-        # Verify programs are serialized
-        self.assertEqual(len(snapshot["programs"]), 3)
-        for pid, prog_dict in snapshot["programs"].items():
+        # Verify parent is serialized
+        self.assertIsInstance(snapshot["parent"], dict)
+        self.assertIn("id", snapshot["parent"])
+        self.assertIn("code", snapshot["parent"])
+
+        # Verify programs for prompt are serialized
+        self.assertGreaterEqual(len(snapshot["top_programs"]), 1)
+        for prog_dict in snapshot["top_programs"]:
             self.assertIsInstance(prog_dict, dict)
             self.assertIn("id", prog_dict)
             self.assertIn("code", prog_dict)

@@ -2,9 +2,9 @@
 """
 Convolve2D Full Fill
 
-This task computes the two-dimensional convolution of two matrices.  
-The input is a tuple of two 2D arrays: the first array has dimensions (30*n)×(30*n) and the second has dimensions (8*n)×(8*n), where n is a scaling factor that increases the problem size.  
-The convolution is performed in "full" mode (all overlapping regions are computed) with "fill" boundary handling (treating areas outside the array as zeros).  
+This task computes the two-dimensional convolution of two matrices.
+The input is a tuple of two 2D arrays: the first array has dimensions (30*n)×(30*n) and the second has dimensions (8*n)×(8*n), where n is a scaling factor that increases the problem size.
+The convolution is performed in "full" mode (all overlapping regions are computed) with "fill" boundary handling (treating areas outside the array as zeros).
 The output is a 2D array representing the convolution result.
 
 Input:
@@ -13,12 +13,12 @@ A tuple of two 2D arrays:
  - Second array: a (8*n)×(8*n) matrix of real numbers.
 
 Example input:
-a = 
+a =
 [[ 0.08704727, -1.45436573,  0.76103773, ...,  0.44386323,  0.33367433, -1.49407907],
  [ 0.3130677,  -0.85409574, -2.55298982, ...,  0.6536186,   0.8644362,  -0.74216502],
  ...
  [ 0.3130677,  -0.85409574, -2.55298982, ...,  0.6536186,   0.8644362,  -0.74216502]]
-b = 
+b =
 [[ 0.04575964, -0.18718385,  1.53277921, ..., -0.91202677,  0.72909056,  0.12898291],
  [ 0.17904984, -0.0342425,   0.97873798, ...,  0.14204471,  0.6154001,  -0.29169375],
  ...
@@ -51,29 +51,31 @@ Consider these algorithmic improvements for massive performance gains:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
+
 import numpy as np
 from scipy import signal
-from typing import Any, Dict, List, Optional
+
 
 class Convolve2DFullFill:
     """
     Initial implementation of convolve2d_full_fill task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the Convolve2DFullFill."""
         self.mode = "full"
         self.boundary = "fill"
-    
+
     def solve(self, problem):
         """
         Solve the convolve2d_full_fill problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to convolve2d_full_fill
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -87,19 +89,19 @@ class Convolve2DFullFill:
             a, b = problem
             result = signal.convolve2d(a, b, mode=self.mode, boundary=self.boundary)
             return result
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -122,24 +124,26 @@ class Convolve2DFullFill:
                 logging.error(f"Convolve2D solution error {error} exceeds tolerance {tol}.")
                 return False
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = Convolve2DFullFill()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

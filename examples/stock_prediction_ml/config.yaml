@@ -1,0 +1,358 @@
+# Stock Prediction ML - Full Scientific Discovery Configuration
+# =============================================================
+# Evolves PyTorch neural networks for stock prediction on DGX Spark (GB10)
+#
+# Features enabled:
+# - RL Adaptive Selection (learns explore/exploit timing)
+# - Meta-Prompting (learns effective optimization strategies)
+# - Discovery Mode (problem evolution, adversarial testing)
+# - Heisenberg Engine (discovers hidden market variables)
+#
+# Hidden variables the system might discover:
+# - Market regimes (bull/bear/sideways)
+# - Volatility clustering (GARCH effects)
+# - Sector correlations
+# - Earnings/news impact windows
+# - Liquidity patterns
+#
+# Usage:
+#   cd examples/stock_prediction_ml
+#   python ../../openevolve-run.py initial_program.py evaluator.py --config config.yaml
+
+max_iterations: 500                  # ~30-60s per eval = 4-8 hours total
+checkpoint_interval: 20              # Checkpoint every 20 iterations
+log_level: "INFO"
+random_seed: null                    # Random for diversity
+
+# Evolution settings
+diff_based_evolution: true           # Incremental model changes
+max_code_length: 30000               # PyTorch models can be verbose
+
+# Early stopping disabled for discovery
+early_stopping_patience: null
+
+# =============================================================================
+# LLM Configuration
+# =============================================================================
+llm:
+  # Using CLIProxyAPI (localhost:8317) for subscription-based access
+  # Start proxy: cd ~/cliproxyapi && ./cli-proxy-api
+  # NO "openai/" prefix needed - CLIProxyAPI routes by model name
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  models:
+    - name: "claude-opus-4-5-20251101"
+      weight: 0.6                    # Primary: Claude Opus 4.5
+    - name: "gemini-3-pro-preview"
+      weight: 0.4                    # Secondary: Gemini 3.0 Pro
+
+  evaluator_models:
+    - name: "gemini-3-pro-preview"
+      weight: 1.0
+
+  temperature: 0.8                   # Creative for architecture exploration
+  top_p: 0.95
+  max_tokens: 8192
+
+  timeout: 180
+  retries: 5
+  retry_delay: 5
+
+# =============================================================================
+# Prompt Configuration
+# =============================================================================
+prompt:
+  system_message: |
+    You are an expert quantitative researcher and deep learning engineer.
+    Your goal is to evolve neural network architectures for stock return prediction.
+
+    Key areas to explore:
+    1. FEATURE ENGINEERING (engineer_features function):
+       - Technical indicators (RSI, MACD, Bollinger Bands)
+       - Volume patterns and anomalies
+       - Cross-asset correlations
+       - Volatility features (realized, implied proxies)
+       - Momentum at multiple timescales
+
+    2. MODEL ARCHITECTURE (StockPredictor class):
+       - Attention mechanisms for temporal patterns
+       - Residual connections
+       - Layer normalization vs batch normalization
+       - Hidden sizes and depth
+       - Bidirectional vs unidirectional LSTM
+       - Transformer blocks
+       - Multi-head attention configurations
+
+    3. LOSS FUNCTION (compute_loss function):
+       - Directional accuracy weighting
+       - Sharpe-aware losses
+       - Quantile regression for tail risk
+       - Asymmetric losses (penalize false positives differently)
+
+    4. TRAINING LOOP (train_model function):
+       - Learning rate schedules
+       - Optimizer choices (Adam, AdamW, LAMB)
+       - Data augmentation (noise injection, time warping)
+       - Early stopping criteria
+
+    Remember: Markets are non-stationary. Features that worked historically may not work in the future.
+    Focus on robust patterns, not overfitting.
+
+  evaluator_system_message: |
+    You are a quantitative finance expert reviewing ML model changes.
+    Evaluate for: robustness, overfitting risk, computational efficiency.
+
+  num_top_programs: 3
+  num_diverse_programs: 3
+
+  use_template_stochasticity: true
+  template_variations:
+    improvement_suggestion:
+      - "Based on quant research, try this approach:"
+      - "This architectural change often improves prediction:"
+      - "Exploring a new feature engineering idea:"
+      - "Testing a hypothesis about market structure:"
+
+  include_artifacts: true
+  max_artifact_bytes: 65536
+
+  # Meta-prompting for learning effective strategies
+  meta_prompting:
+    enabled: true
+    selection_algorithm: "thompson_sampling"
+    thompson_prior_alpha: 1.0
+    thompson_prior_beta: 1.0
+
+    reward_type: "improvement"
+    improvement_threshold: 0.0
+
+    meta_prompt_weight: 0.15
+    meta_prompt_position: "section"
+
+    per_island_strategies: true
+    context_aware: true
+
+    exploration_decay: 0.995
+    min_exploration: 0.12
+
+    max_history_per_strategy: 1000
+    warmup_iterations: 40
+
+    strategies_file: null            # Use default strategies
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+database:
+  population_size: 300               # Smaller due to expensive evals
+  archive_size: 50
+  num_islands: 5
+
+  migration_interval: 30
+  migration_rate: 0.1
+
+  elite_selection_ratio: 0.15
+  exploration_ratio: 0.30
+  exploitation_ratio: 0.55
+
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+    # Mirrored phenotype axis from extract_phenotype
+    - "training_cost"
+
+  feature_bins: 10
+  diversity_reference_size: 20
+
+# =============================================================================
+# Evaluator Configuration
+# =============================================================================
+evaluator:
+  timeout: 600                       # 10 minutes for GPU training
+  max_retries: 2
+
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.3                            # Stage 1: Basic viability (>50% direction)
+    - 0.5                            # Stage 2: Decent performance
+    - 0.65                           # Stage 3: Good performance
+
+  # Budgeted cascade: only run full stage3 when parent is promising.
+  budgeted_cascade_enabled: true
+  budget_stage3_parent_threshold: 0.6
+  budget_max_stage_low: 2
+  budget_max_stage_high: 3
+
+  parallel_evaluations: 2            # Limited by GPU
+
+  use_llm_feedback: true              # LLM evaluates code quality
+  llm_feedback_weight: 0.1
+
+# =============================================================================
+# Evolution Trace
+# =============================================================================
+evolution_trace:
+  enabled: true
+  format: 'jsonl'
+  include_code: true
+  include_prompts: true
+  buffer_size: 10
+  compress: false
+
+# =============================================================================
+# RL Adaptive Selection
+# =============================================================================
+rl:
+  enabled: true
+  algorithm: "contextual_thompson"
+
+  state_features:
+    - "normalized_iteration"
+    - "best_fitness"
+    - "fitness_improvement_rate"
+    - "population_diversity"
+    - "archive_coverage"
+    - "generations_without_improvement"
+    - "recent_exploration_success"
+    - "recent_exploitation_success"
+
+  reward:
+    fitness_weight: 0.55             # Focus on prediction performance
+    diversity_weight: 0.20           # Maintain diverse architectures
+    novelty_weight: 0.15             # Reward novel approaches
+    efficiency_weight: 0.10
+    improvement_threshold: 0.0
+    plateau_penalty: 0.06
+    plateau_window: 40
+
+  learning_rate: 0.015
+  discount_factor: 0.96
+  exploration_bonus: 1.8
+
+  warmup_iterations: 60              # Longer warmup for expensive evals
+  exploration_decay: 0.996
+  min_exploration: 0.1
+
+  action_history_size: 80
+  success_window: 20
+
+  per_island_policies: true
+  save_detailed_stats: true
+
+# =============================================================================
+# Discovery Mode
+# =============================================================================
+discovery:
+  enabled: true
+  problem_description: |
+    Predict next-day stock returns using historical price and volume data.
+    The goal is to maximize directional accuracy and risk-adjusted returns (Sharpe ratio).
+
+    Known challenges:
+    - Markets are non-stationary (regimes change)
+    - Low signal-to-noise ratio in financial data
+    - Overfitting is a major risk
+
+    Potential hidden variables:
+    - Market regime (bull/bear/sideways/crisis)
+    - Volatility regime (low/high/transitioning)
+    - Sector rotation patterns
+    - Macro factors (interest rates, VIX correlation)
+
+  # Problem Evolution
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 5  # Evolve after 5 good solutions
+
+  # POET-style paired co-evolution (multiple active problems)
+  coevolution_enabled: true
+  max_active_problems: 3
+  novelty_threshold: 0.12
+  min_problem_difficulty: 0.8
+  max_problem_difficulty: 5.0
+  min_islands_per_problem: 1
+
+  # Minimal-criterion transfer screening for new problems
+  transfer_trial_programs: 3
+  min_transfer_fitness: 0.4
+  max_transfer_fitness: 0.9
+  transfer_max_stage: 2
+
+  # Adversarial Skeptic
+  skeptic_enabled: true
+  skeptic:
+    # NOTE: Skeptic runs on a remote host for this example (PyTorch on DGX),
+    # so SSH/SCP + torch startup overhead can exceed 30s. Use a larger timeout
+    # and keep non-plugin rounds disabled to avoid slowing evolution.
+    num_attack_rounds: 0
+    attack_timeout: 120.0
+    enable_blind_reproduction: false
+    static_analysis_enabled: true
+    entrypoint: "skeptic_entrypoint"
+
+    # Adaptive skeptic budget + ML-specific perturbation attacks
+    adaptive_attack_rounds: false
+    min_attack_rounds: 1
+    max_attack_rounds: 4
+    plugins:
+      - "ml_metamorphic_invariants"
+      - "ml_data_perturbation"
+
+    # Remote execution for PyTorch code (runs on DGX)
+    remote_execution: true
+    remote_host: "trevor-morgan@sparky.local"
+    remote_python: "/home/trevor-morgan/repos/dgx-local-trainer/.venv/bin/python3"
+    remote_work_dir: "/tmp/openevolve_skeptic"
+
+    # Trigger remote for torch imports
+    required_imports_for_remote:
+      - "torch"
+      - "numpy"  # numpy often paired with torch in ML code
+
+  # Surprise Exploration
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.12
+
+  solution_threshold: 0.7            # 70% combined score = solution
+
+  phenotype_dimensions:
+    - "complexity"
+    - "efficiency"
+
+  # Mirror task-specific phenotypes into program metrics so MAP-Elites can bin on them.
+  phenotype_feature_dimensions:
+    - "training_cost"
+    - "robustness"
+
+  log_discoveries: true
+
+  # Heisenberg Engine - Discover Hidden Market Variables
+  heisenberg:
+    enabled: true
+
+    # Crisis detection for stuck optimization
+    min_plateau_iterations: 50       # 50 iters at ~1min each = ~1 hour plateau
+    fitness_improvement_threshold: 0.005
+    variance_window: 25
+    crisis_confidence_threshold: 0.6
+    cooldown_iterations: 40
+
+    # Probe synthesis for variable discovery
+    max_probes_per_crisis: 5
+    probe_timeout: 120.0             # Longer timeout for financial probes
+
+    # Validation
+    validation_trials: 5
+    min_correlation_threshold: 0.5
+
+    # Ontology
+    max_ontology_generations: 10
+    max_variables_per_ontology: 50
+
+    # Soft reset
+    programs_to_keep_on_reset: 15
+
+    # Code instrumentation
+    auto_instrument: true
+    instrumentation_level: "standard"

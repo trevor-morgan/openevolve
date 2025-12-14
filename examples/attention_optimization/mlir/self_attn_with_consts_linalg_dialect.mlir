@@ -192,4 +192,3 @@ module attributes {torch.debug_module_name = "SelfAttention"} {
     return %51 : tensor<1x16x64xf32>
   }
 }
-

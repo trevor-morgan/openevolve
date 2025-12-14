@@ -7,18 +7,18 @@ Includes comparison mode to benchmark standard vs optimized attention.
 """
 
 import argparse
-import sys
-import os
-import time
 import json
+import os
+import sys
+import time
+
 import numpy as np
-from typing import Dict, List, Any
 
 # Add the current directory to path so we can import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from qwen3_benchmark_suite import Qwen3BenchmarkSuite, BenchmarkResult
 from quick_benchmark_test import run_quick_test
+from qwen3_benchmark_suite import Qwen3BenchmarkSuite
 
 
 def run_compare_benchmarks(args):
@@ -26,8 +26,8 @@ def run_compare_benchmarks(args):
     Run comprehensive comparison between standard and optimized attention.
     Uses the full benchmark suite for thorough analysis.
     """
-    print(f"\n🔬 Running Comparison Benchmark Mode")
-    print(f"📊 Comparing Standard vs OpenEvolve Discovered Optimization")
+    print("\n🔬 Running Comparison Benchmark Mode")
+    print("📊 Comparing Standard vs OpenEvolve Discovered Optimization")
     print(f"🎯 Model: {args.model}")
     print(f"📁 Output directory: {args.output_dir}")
     print("=" * 80)
@@ -115,7 +115,7 @@ def run_optimized_benchmark(args, original_dir):
             best_program_path = os.path.join(original_dir, "best_program.py")
 
         if not os.path.exists(best_program_path):
-            print(f"❌ Error: Optimized program not found")
+            print("❌ Error: Optimized program not found")
             print("Searched in the following locations:")
             print(
                 f"  1. {os.path.join(original_dir, 'openevolve_output', 'best', 'best_program.py')}"
@@ -319,7 +319,7 @@ def analyze_comparison_results(standard_results, optimized_results, model_name):
     avg_std_decode = np.mean(std_decode_speeds) if std_decode_speeds else 0
     avg_opt_decode = np.mean(opt_decode_speeds) if opt_decode_speeds else 0
 
-    print(f"📊 Analysis complete:")
+    print("📊 Analysis complete:")
     print(f"  📈 Average standard decode speed: {avg_std_decode:.1f} tokens/sec")
     print(f"  📈 Average optimized decode speed: {avg_opt_decode:.1f} tokens/sec")
     print(
@@ -426,7 +426,7 @@ def save_comparison_results(comparison_results, output_dir):
                 ]
             )
 
-    print(f"\n📁 Comparison results saved:")
+    print("\n📁 Comparison results saved:")
     print(f"  📊 Detailed: {comparison_file}")
     print(f"  📈 Summary: {csv_file}")
 
@@ -446,9 +446,9 @@ def print_comparison_summary(comparison_results):
     summary = comparison_results["summary"]
     total_tests = comparison_results["total_comparisons"]
 
-    print(f"\n💡 OPTIMIZATION: Custom Metal Kernel for GQA Attention")
-    print(f"   Strategy: Hand-optimized Metal kernel using vectorized operations")
-    print(f"   Target: Apple Silicon GPU with optimized memory access patterns")
+    print("\n💡 OPTIMIZATION: Custom Metal Kernel for GQA Attention")
+    print("   Strategy: Hand-optimized Metal kernel using vectorized operations")
+    print("   Target: Apple Silicon GPU with optimized memory access patterns")
 
     print(f"\n🎯 OVERALL PERFORMANCE IMPROVEMENTS (across {total_tests} comprehensive tests):")
     print(f"  📈 Average Decode Speed Improvement: {summary['avg_decode_improvement_pct']:+.2f}%")
@@ -456,7 +456,7 @@ def print_comparison_summary(comparison_results):
     print(f"  💾 Average Memory Reduction:        {summary['avg_memory_reduction_pct']:+.2f}%")
     print(f"  ⏱️  Average Time Reduction:          {summary['avg_time_reduction_pct']:+.2f}%")
 
-    print(f"\n📊 ABSOLUTE PERFORMANCE:")
+    print("\n📊 ABSOLUTE PERFORMANCE:")
     print(
         f"  🔵 Standard MLX-LM:     {summary['avg_standard_decode_speed']:.1f} tokens/sec average"
     )
@@ -467,7 +467,7 @@ def print_comparison_summary(comparison_results):
         f"  📈 Net Improvement:     {summary['avg_optimized_decode_speed'] - summary['avg_standard_decode_speed']:+.1f} tokens/sec"
     )
 
-    print(f"\n📊 DETAILED BENCHMARK COMPARISON:")
+    print("\n📊 DETAILED BENCHMARK COMPARISON:")
     print(f"{'='*110}")
     print(
         f"{'Benchmark':<30} {'Standard':<12} {'Optimized':<12} {'Decode':<12} {'Memory':<12} {'Time':<12}"
@@ -515,7 +515,7 @@ def print_comparison_summary(comparison_results):
         key=lambda x: x["improvements"]["decode_speed_pct"],
     )
 
-    print(f"\n🏆 PERFORMANCE HIGHLIGHTS:")
+    print("\n🏆 PERFORMANCE HIGHLIGHTS:")
     print(
         f"  🥇 Best Improvement: {best_decode['benchmark_name']} (+{best_decode['improvements']['decode_speed_pct']:.1f}%)"
     )
@@ -528,52 +528,52 @@ def print_comparison_summary(comparison_results):
     total_count = summary["total_benchmarks"]
     success_rate = improved_count / total_count * 100 if total_count > 0 else 0
 
-    print(f"\n📈 OPTIMIZATION ANALYSIS:")
+    print("\n📈 OPTIMIZATION ANALYSIS:")
     print(f"  ✅ Benchmarks Improved: {improved_count}/{total_count}")
     print(f"  📊 Success Rate: {success_rate:.1f}%")
 
     if summary["avg_decode_improvement_pct"] > 15:
-        print(f"  🎉 EXCELLENT: OpenEvolve discovered a significant optimization!")
+        print("  🎉 EXCELLENT: OpenEvolve discovered a significant optimization!")
         print(
             f"  💡 {summary['avg_decode_improvement_pct']:.1f}% average improvement is substantial"
         )
-        print(f"  🔬 This warrants further investigation and potential MLX-LM contribution")
+        print("  🔬 This warrants further investigation and potential MLX-LM contribution")
     elif summary["avg_decode_improvement_pct"] > 5:
-        print(f"  📈 GOOD: Meaningful performance improvements achieved")
+        print("  📈 GOOD: Meaningful performance improvements achieved")
         print(
             f"  🔧 {summary['avg_decode_improvement_pct']:.1f}% improvement shows optimization potential"
         )
     elif summary["avg_decode_improvement_pct"] > 0:
-        print(f"  📊 MODEST: Some improvements observed")
+        print("  📊 MODEST: Some improvements observed")
         print(
             f"  💭 {summary['avg_decode_improvement_pct']:.1f}% suggests room for further optimization"
         )
     else:
-        print(f"  ⚠️  No overall improvement detected")
-        print(f"  🔧 Consider running additional evolution cycles or different strategies")
+        print("  ⚠️  No overall improvement detected")
+        print("  🔧 Consider running additional evolution cycles or different strategies")
 
     # Technical insights
-    print(f"\n🔬 TECHNICAL INSIGHTS:")
-    print(f"  💡 Custom Metal Kernel Strategy:")
-    print(f"     • Standard: mx.fast.scaled_dot_product_attention")
-    print(f"     • Optimized: Hand-written Metal kernel with vectorized operations")
-    print(f"  🧠 Potential Reasons for Performance Gains:")
-    print(f"     • Optimized memory access patterns for Apple Silicon")
-    print(f"     • Vectorized operations using vec<T, 8> types")
-    print(f"     • Better cache locality with custom computation order")
-    print(f"     • GPU-specific optimizations for M-series processors")
+    print("\n🔬 TECHNICAL INSIGHTS:")
+    print("  💡 Custom Metal Kernel Strategy:")
+    print("     • Standard: mx.fast.scaled_dot_product_attention")
+    print("     • Optimized: Hand-written Metal kernel with vectorized operations")
+    print("  🧠 Potential Reasons for Performance Gains:")
+    print("     • Optimized memory access patterns for Apple Silicon")
+    print("     • Vectorized operations using vec<T, 8> types")
+    print("     • Better cache locality with custom computation order")
+    print("     • GPU-specific optimizations for M-series processors")
 
     if summary["avg_decode_improvement_pct"] > 10:
-        print(f"\n🎯 NEXT STEPS:")
-        print(f"  1. Verify results independently outside this framework")
-        print(f"  2. Profile Metal kernel execution patterns and memory usage")
-        print(f"  3. Test on different Apple Silicon variants (M1, M2, M3, M4)")
-        print(f"  4. Consider contributing Metal kernel optimization back to MLX")
-        print(f"  5. Explore similar Metal kernel strategies for other attention patterns")
+        print("\n🎯 NEXT STEPS:")
+        print("  1. Verify results independently outside this framework")
+        print("  2. Profile Metal kernel execution patterns and memory usage")
+        print("  3. Test on different Apple Silicon variants (M1, M2, M3, M4)")
+        print("  4. Consider contributing Metal kernel optimization back to MLX")
+        print("  5. Explore similar Metal kernel strategies for other attention patterns")
 
     print(f"\n{'='*100}")
-    print(f"🔬 Comprehensive analysis complete! Results saved to comparison files.")
-    print(f"💡 This represents a genuine Metal kernel discovery by OpenEvolve.")
+    print("🔬 Comprehensive analysis complete! Results saved to comparison files.")
+    print("💡 This represents a genuine Metal kernel discovery by OpenEvolve.")
     print(f"{'='*100}")
 
 
@@ -592,7 +592,7 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"🚀 Qwen3 Benchmark Runner")
+    print("🚀 Qwen3 Benchmark Runner")
     print(f"📊 Mode: {args.mode}")
     print(f"🤖 Model: {args.model}")
     print(f"📁 Output: {args.output_dir}")

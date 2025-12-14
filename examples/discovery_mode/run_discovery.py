@@ -29,10 +29,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from openevolve.config import load_config
 from openevolve.controller import OpenEvolve
 
-
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -45,46 +43,22 @@ async def main():
     with the --discovery flag. This example shows programmatic setup
     for more control over the configuration.
     """
-    parser = argparse.ArgumentParser(
-        description="Run OpenEvolve in Discovery Mode"
-    )
+    parser = argparse.ArgumentParser(description="Run OpenEvolve in Discovery Mode")
+    parser.add_argument("initial_program", help="Path to initial program file")
+    parser.add_argument("evaluator", help="Path to evaluator file")
+    parser.add_argument("--config", help="Path to config YAML file")
     parser.add_argument(
-        "initial_program",
-        help="Path to initial program file"
-    )
-    parser.add_argument(
-        "evaluator",
-        help="Path to evaluator file"
-    )
-    parser.add_argument(
-        "--config",
-        help="Path to config YAML file"
-    )
-    parser.add_argument(
-        "--iterations",
-        type=int,
-        default=100,
-        help="Maximum iterations (default: 100)"
+        "--iterations", type=int, default=100, help="Maximum iterations (default: 100)"
     )
     parser.add_argument(
         "--problem-description",
         default="Optimize the given code for correctness and efficiency",
-        help="Natural language description of the problem"
+        help="Natural language description of the problem",
     )
+    parser.add_argument("--output-dir", help="Output directory for results")
+    parser.add_argument("--no-skeptic", action="store_true", help="Disable adversarial skeptic")
     parser.add_argument(
-        "--output-dir",
-        help="Output directory for results"
-    )
-    parser.add_argument(
-        "--no-skeptic",
-        action="store_true",
-        help="Disable adversarial skeptic"
-    )
-    parser.add_argument(
-        "--evolve-after",
-        type=int,
-        default=5,
-        help="Evolve problem after N solutions (default: 5)"
+        "--evolve-after", type=int, default=5, help="Evolve problem after N solutions (default: 5)"
     )
 
     args = parser.parse_args()

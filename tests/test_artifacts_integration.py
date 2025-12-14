@@ -6,9 +6,9 @@ import asyncio
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from openevolve.config import Config, DatabaseConfig, EvaluatorConfig, PromptConfig
+from openevolve.config import Config, DatabaseConfig
 from openevolve.database import Program, ProgramDatabase
 from openevolve.evaluation_result import EvaluationResult
 from openevolve.evaluator import Evaluator
@@ -41,9 +41,9 @@ def evaluate(program_path):
         # Try to compile the program
         with open(program_path, 'r') as f:
             code = f.read()
-        
+
         compile(code, program_path, 'exec')
-        
+
         # If compilation succeeds, return good metrics
         return EvaluationResult(
             metrics={"compile_ok": 1.0, "score": 0.8},
@@ -65,7 +65,7 @@ def evaluate_stage1(program_path):
     try:
         with open(program_path, 'r') as f:
             code = f.read()
-        
+
         compile(code, program_path, 'exec')
         return {"stage1_passed": 1.0, "compile_ok": 1.0}
     except Exception as e:
@@ -187,7 +187,7 @@ def evaluate_stage1(program_path):
             program_id = "cascade_test_1"
 
             # Run cascade evaluation
-            result = await self.evaluator._cascade_evaluate(f"/tmp/test_program.py")
+            result = await self.evaluator._cascade_evaluate("/tmp/test_program.py")
 
             # Should be an EvaluationResult with artifacts
             if isinstance(result, EvaluationResult):
@@ -196,12 +196,18 @@ def evaluate_stage1(program_path):
                 # If it returns a dict, wrap it
                 return EvaluationResult.from_dict(result)
 
-        # Mock the actual file operations since we're testing the cascade logic
-        with patch("openevolve.evaluator.run_in_executor") as mock_executor:
-            # Mock stage1 to return an error with artifacts
-            mock_executor.return_value = EvaluationResult(
-                metrics={"stage1_passed": 0.0}, artifacts={"stderr": "Stage 1 compilation error"}
+        # Mock the executor call inside cascade evaluation
+        from unittest.mock import AsyncMock, MagicMock
+
+        with patch("openevolve.evaluator.asyncio.get_event_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_loop.run_in_executor = AsyncMock(
+                return_value=EvaluationResult(
+                    metrics={"stage1_passed": 0.0},
+                    artifacts={"stderr": "Stage 1 compilation error"},
+                )
             )
+            mock_get_loop.return_value = mock_loop
 
             result = asyncio.run(run_test())
 

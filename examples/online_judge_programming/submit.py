@@ -3,10 +3,10 @@ import argparse
 import configparser
 import os
 import re
-import requests
 import sys
 import time
 
+import requests
 from lxml.html import fragment_fromstring
 
 _DEFAULT_CONFIG = "/usr/local/etc/kattisrc"
@@ -196,7 +196,7 @@ def is_python2(files):
                         return True
         except UnicodeDecodeError:
             pass
-        except IOError:
+        except OSError:
             return False
     return False
 
@@ -215,7 +215,7 @@ def guess_language(ext, files):
             return "Python 2"
         else:
             return "Python 3"
-    return _LANGUAGE_GUESS.get(ext, None)
+    return _LANGUAGE_GUESS.get(ext)
 
 
 def guess_mainfile(language, files):
@@ -234,7 +234,7 @@ def guess_mainfile(language, files):
                     return filename
         except UnicodeDecodeError:
             pass
-        except IOError:
+        except OSError:
             pass
     return files[0]
 

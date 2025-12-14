@@ -2,12 +2,13 @@
 Evaluator for the function minimization example
 """
 
-import importlib.util
-import numpy as np
-import time
 import concurrent.futures
+import importlib.util
+import time
 import traceback
-import signal
+
+import numpy as np
+
 from openevolve.evaluation_result import EvaluationResult
 
 
@@ -66,14 +67,14 @@ def evaluate(program_path):
 
         # Check if the required function exists
         if not hasattr(program, "run_search"):
-            print(f"Error: program does not have 'run_search' function")
-            
+            print("Error: program does not have 'run_search' function")
+
             error_artifacts = {
                 "error_type": "MissingFunction",
                 "error_message": "Program is missing required 'run_search' function",
-                "suggestion": "Make sure your program includes a function named 'run_search' that returns (x, y, value) or (x, y)"
+                "suggestion": "Make sure your program includes a function named 'run_search' that returns (x, y, value) or (x, y)",
             }
-            
+
             return EvaluationResult(
                 metrics={
                     "value_score": 0.0,
@@ -82,7 +83,7 @@ def evaluate(program_path):
                     "combined_score": 0.0,
                     "error": "Missing run_search function",
                 },
-                artifacts=error_artifacts
+                artifacts=error_artifacts,
             )
 
         # Run multiple trials
@@ -154,17 +155,17 @@ def evaluate(program_path):
                 success_count += 1
 
             except TimeoutError as e:
-                print(f"Trial {trial}: {str(e)}")
+                print(f"Trial {trial}: {e!s}")
                 continue
             except IndexError as e:
                 # Specifically handle IndexError which often happens with early termination checks
-                print(f"Trial {trial}: IndexError - {str(e)}")
+                print(f"Trial {trial}: IndexError - {e!s}")
                 print(
                     "This is likely due to a list index check before the list is fully populated."
                 )
                 continue
             except Exception as e:
-                print(f"Trial {trial}: Error - {str(e)}")
+                print(f"Trial {trial}: Error - {e!s}")
                 print(traceback.format_exc())
                 continue
 
@@ -173,9 +174,9 @@ def evaluate(program_path):
             error_artifacts = {
                 "error_type": "AllTrialsFailed",
                 "error_message": f"All {num_trials} trials failed - common issues: timeouts, crashes, or invalid return values",
-                "suggestion": "Check for infinite loops, ensure function returns (x, y) or (x, y, value), and verify algorithm terminates within time limit"
+                "suggestion": "Check for infinite loops, ensure function returns (x, y) or (x, y, value), and verify algorithm terminates within time limit",
             }
-            
+
             return EvaluationResult(
                 metrics={
                     "value_score": 0.0,
@@ -184,7 +185,7 @@ def evaluate(program_path):
                     "combined_score": 0.0,
                     "error": "All trials failed",
                 },
-                artifacts=error_artifacts
+                artifacts=error_artifacts,
             )
 
         # Calculate metrics
@@ -195,7 +196,7 @@ def evaluate(program_path):
         # Convert to scores (higher is better)
         value_score = float(1.0 / (1.0 + abs(avg_value - GLOBAL_MIN_VALUE)))
         distance_score = float(1.0 / (1.0 + avg_distance))
-        
+
         # Add reliability score based on success rate
         reliability_score = float(success_count / num_trials)
 
@@ -217,9 +218,11 @@ def evaluate(program_path):
         # Add artifacts for successful runs
         artifacts = {
             "convergence_info": f"Converged in {num_trials} trials with {success_count} successes",
-            "best_position": f"Final position: x={x_values[-1]:.4f}, y={y_values[-1]:.4f}" if x_values else "No successful trials",
+            "best_position": f"Final position: x={x_values[-1]:.4f}, y={y_values[-1]:.4f}"
+            if x_values
+            else "No successful trials",
             "average_distance_to_global": f"{avg_distance:.4f}",
-            "search_efficiency": f"Success rate: {reliability_score:.2%}"
+            "search_efficiency": f"Success rate: {reliability_score:.2%}",
         }
 
         return EvaluationResult(
@@ -229,20 +232,20 @@ def evaluate(program_path):
                 "reliability_score": reliability_score,
                 "combined_score": combined_score,
             },
-            artifacts=artifacts
+            artifacts=artifacts,
         )
     except Exception as e:
-        print(f"Evaluation failed completely: {str(e)}")
+        print(f"Evaluation failed completely: {e!s}")
         print(traceback.format_exc())
-        
+
         # Create error artifacts
         error_artifacts = {
             "error_type": type(e).__name__,
             "error_message": str(e),
             "full_traceback": traceback.format_exc(),
-            "suggestion": "Check for syntax errors or missing imports in the generated code"
+            "suggestion": "Check for syntax errors or missing imports in the generated code",
         }
-        
+
         return EvaluationResult(
             metrics={
                 "value_score": 0.0,
@@ -251,7 +254,7 @@ def evaluate(program_path):
                 "combined_score": 0.0,
                 "error": str(e),
             },
-            artifacts=error_artifacts
+            artifacts=error_artifacts,
         )
 
 
@@ -259,9 +262,9 @@ def evaluate(program_path):
 def evaluate_stage1(program_path):
     """First stage evaluation with fewer trials"""
     # Known global minimum (approximate)
-    GLOBAL_MIN_X = float(-1.704)
-    GLOBAL_MIN_Y = float(0.678)
-    GLOBAL_MIN_VALUE = float(-1.519)
+    GLOBAL_MIN_X = -1.704
+    GLOBAL_MIN_Y = 0.678
+    GLOBAL_MIN_VALUE = -1.519
 
     # Quick check to see if the program runs without errors
     try:
@@ -272,21 +275,21 @@ def evaluate_stage1(program_path):
 
         # Check if the required function exists
         if not hasattr(program, "run_search"):
-            print(f"Stage 1 validation: Program does not have 'run_search' function")
-            
+            print("Stage 1 validation: Program does not have 'run_search' function")
+
             error_artifacts = {
                 "error_type": "MissingFunction",
                 "error_message": "Stage 1: Program is missing required 'run_search' function",
-                "suggestion": "Make sure your program includes a function named 'run_search' that returns (x, y, value) or (x, y)"
+                "suggestion": "Make sure your program includes a function named 'run_search' that returns (x, y, value) or (x, y)",
             }
-            
+
             return EvaluationResult(
                 metrics={
-                    "runs_successfully": 0.0, 
+                    "runs_successfully": 0.0,
                     "combined_score": 0.0,
-                    "error": "Missing run_search function"
+                    "error": "Missing run_search function",
                 },
-                artifacts=error_artifacts
+                artifacts=error_artifacts,
             )
 
         try:
@@ -307,37 +310,37 @@ def evaluate_stage1(program_path):
                     print(
                         f"Stage 1: Invalid result format, expected tuple of 2 or 3 values but got {len(result)}"
                     )
-                    
+
                     error_artifacts = {
                         "error_type": "InvalidReturnFormat",
                         "error_message": f"Stage 1: Function returned tuple with {len(result)} values, expected 2 or 3",
-                        "suggestion": "run_search() must return (x, y) or (x, y, value) - check your return statement"
+                        "suggestion": "run_search() must return (x, y) or (x, y, value) - check your return statement",
                     }
-                    
+
                     return EvaluationResult(
                         metrics={
-                            "runs_successfully": 0.0, 
+                            "runs_successfully": 0.0,
                             "combined_score": 0.0,
-                            "error": "Invalid result format"
+                            "error": "Invalid result format",
                         },
-                        artifacts=error_artifacts
+                        artifacts=error_artifacts,
                     )
             else:
                 print(f"Stage 1: Invalid result format, expected tuple but got {type(result)}")
-                
+
                 error_artifacts = {
                     "error_type": "InvalidReturnType",
                     "error_message": f"Stage 1: Function returned {type(result)}, expected tuple",
-                    "suggestion": "run_search() must return a tuple like (x, y) or (x, y, value), not a single value or other type"
+                    "suggestion": "run_search() must return a tuple like (x, y) or (x, y, value), not a single value or other type",
                 }
-                
+
                 return EvaluationResult(
                     metrics={
-                        "runs_successfully": 0.0, 
+                        "runs_successfully": 0.0,
                         "combined_score": 0.0,
-                        "error": "Invalid result format"
+                        "error": "Invalid result format",
                     },
-                    artifacts=error_artifacts
+                    artifacts=error_artifacts,
                 )
 
             # Ensure all values are float
@@ -355,20 +358,20 @@ def evaluate_stage1(program_path):
                 or np.isinf(value)
             ):
                 print(f"Stage 1 validation: Invalid result, got x={x}, y={y}, value={value}")
-                
+
                 error_artifacts = {
                     "error_type": "InvalidResultValues",
                     "error_message": f"Stage 1: Got invalid values - x={x}, y={y}, value={value}",
-                    "suggestion": "Function returned NaN or infinite values. Check for division by zero, invalid math operations, or uninitialized variables"
+                    "suggestion": "Function returned NaN or infinite values. Check for division by zero, invalid math operations, or uninitialized variables",
                 }
-                
+
                 return EvaluationResult(
                     metrics={
-                        "runs_successfully": 0.5, 
+                        "runs_successfully": 0.5,
                         "combined_score": 0.0,
-                        "error": "Invalid result values"
+                        "error": "Invalid result values",
                     },
-                    artifacts=error_artifacts
+                    artifacts=error_artifacts,
                 )
 
             # Calculate distance safely
@@ -398,7 +401,11 @@ def evaluate_stage1(program_path):
             stage1_artifacts = {
                 "stage1_result": f"Found solution at x={x:.4f}, y={y:.4f} with value={value:.4f}",
                 "distance_to_global": f"{distance:.4f}",
-                "solution_quality": f"Distance < 0.5: Very close" if distance < 0.5 else f"Distance < 1.5: Good region" if distance < 1.5 else "Could be improved"
+                "solution_quality": "Distance < 0.5: Very close"
+                if distance < 0.5
+                else "Distance < 1.5: Good region"
+                if distance < 1.5
+                else "Could be improved",
             }
 
             return EvaluationResult(
@@ -408,82 +415,70 @@ def evaluate_stage1(program_path):
                     "distance_score": distance_score,
                     "combined_score": combined_score,
                 },
-                artifacts=stage1_artifacts
+                artifacts=stage1_artifacts,
             )
         except TimeoutError as e:
             print(f"Stage 1 evaluation timed out: {e}")
-            
+
             error_artifacts = {
                 "error_type": "TimeoutError",
                 "error_message": "Stage 1: Function execution exceeded 5 second timeout",
-                "suggestion": "Function is likely stuck in infinite loop or doing too much computation. Try reducing iterations or adding early termination conditions"
+                "suggestion": "Function is likely stuck in infinite loop or doing too much computation. Try reducing iterations or adding early termination conditions",
             }
-            
+
             return EvaluationResult(
-                metrics={
-                    "runs_successfully": 0.0, 
-                    "combined_score": 0.0,
-                    "error": "Timeout"
-                },
-                artifacts=error_artifacts
+                metrics={"runs_successfully": 0.0, "combined_score": 0.0, "error": "Timeout"},
+                artifacts=error_artifacts,
             )
         except IndexError as e:
             # Specifically handle IndexError which often happens with early termination checks
             print(f"Stage 1 evaluation failed with IndexError: {e}")
             print("This is likely due to a list index check before the list is fully populated.")
-            
+
             error_artifacts = {
                 "error_type": "IndexError",
-                "error_message": f"Stage 1: {str(e)}",
-                "suggestion": "List index out of range - likely accessing empty list or wrong index. Check list initialization and bounds"
+                "error_message": f"Stage 1: {e!s}",
+                "suggestion": "List index out of range - likely accessing empty list or wrong index. Check list initialization and bounds",
             }
-            
+
             return EvaluationResult(
                 metrics={
-                    "runs_successfully": 0.0, 
+                    "runs_successfully": 0.0,
                     "combined_score": 0.0,
-                    "error": f"IndexError: {str(e)}"
+                    "error": f"IndexError: {e!s}",
                 },
-                artifacts=error_artifacts
+                artifacts=error_artifacts,
             )
         except Exception as e:
             print(f"Stage 1 evaluation failed: {e}")
             print(traceback.format_exc())
-            
+
             error_artifacts = {
                 "error_type": type(e).__name__,
-                "error_message": f"Stage 1: {str(e)}",
+                "error_message": f"Stage 1: {e!s}",
                 "full_traceback": traceback.format_exc(),
-                "suggestion": "Unexpected error occurred. Check the traceback for specific issue"
+                "suggestion": "Unexpected error occurred. Check the traceback for specific issue",
             }
-            
+
             return EvaluationResult(
-                metrics={
-                    "runs_successfully": 0.0, 
-                    "combined_score": 0.0,
-                    "error": str(e)
-                },
-                artifacts=error_artifacts
+                metrics={"runs_successfully": 0.0, "combined_score": 0.0, "error": str(e)},
+                artifacts=error_artifacts,
             )
 
     except Exception as e:
         print(f"Stage 1 evaluation failed: {e}")
         print(traceback.format_exc())
-        
+
         error_artifacts = {
             "error_type": type(e).__name__,
-            "error_message": f"Stage 1 outer exception: {str(e)}",
+            "error_message": f"Stage 1 outer exception: {e!s}",
             "full_traceback": traceback.format_exc(),
-            "suggestion": "Critical error during stage 1 evaluation. Check program syntax and imports"
+            "suggestion": "Critical error during stage 1 evaluation. Check program syntax and imports",
         }
-        
+
         return EvaluationResult(
-            metrics={
-                "runs_successfully": 0.0, 
-                "combined_score": 0.0,
-                "error": str(e)
-            },
-            artifacts=error_artifacts
+            metrics={"runs_successfully": 0.0, "combined_score": 0.0, "error": str(e)},
+            artifacts=error_artifacts,
         )
 
 

@@ -1,5 +1,6 @@
-from typing import Optional, Any
 from dataclasses import dataclass
+from typing import Any
+
 import sympy
 
 
@@ -9,11 +10,11 @@ class Equation:
     symbol_descs: list
     symbol_properties: list
     expression: str
-    desc: Optional[str] = None
+    desc: str | None = None
 
-    sympy_format: Optional[sympy.Expr] = None
-    lambda_format: Optional[callable] = None
-    program_format: Optional[str] = None
+    sympy_format: sympy.Expr | None = None
+    lambda_format: callable | None = None
+    program_format: str | None = None
 
 
 @dataclass
@@ -29,7 +30,7 @@ class SEDTask:
     symbol_descs: list
     symbol_properties: list
     samples: Any
-    desc: Optional[str] = None
+    desc: str | None = None
 
 
 @dataclass

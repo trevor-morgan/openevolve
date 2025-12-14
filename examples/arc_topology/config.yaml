@@ -1,0 +1,63 @@
+# OpenEvolve configuration for ARC Topology problems
+# Configured to use CLIProxyAPI for Claude Max subscription
+
+max_iterations: 50
+checkpoint_interval: 10
+
+# LLM Configuration
+llm:
+  # CLIProxyAPI endpoint (Claude Max / ChatGPT Pro / Gemini)
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  # Best models from CLIProxyAPI (no prefix needed)
+  # Claude: claude-sonnet-4-20250514, claude-opus-4-5-20251101
+  # GPT: gpt-5.1-codex-max-xhigh, gpt-5.1-codex
+  # Gemini: gemini-2.5-flash, gemini-3-pro-preview
+  primary_model: "claude-opus-4-5-20251101"
+  primary_model_weight: 0.7
+
+  # Secondary model for diversity
+  secondary_model: "gemini-3-pro-preview"
+  secondary_model_weight: 0.3
+
+  # Generation parameters
+  temperature: 0.8
+  top_p: null  # Claude doesn't allow both temperature and top_p
+  max_tokens: 4096
+  timeout: 120
+
+# Prompt Configuration
+prompt:
+  system_message: |
+    You are an expert in graph theory and topological data analysis.
+    Your task is to implement a function that computes Betti numbers for undirected graphs.
+
+    Betti numbers measure topological features:
+    - beta_0 = number of connected components
+    - beta_1 = number of independent cycles (holes)
+
+    For a graph: beta_1 = E - V + beta_0 (Euler characteristic)
+
+    Focus on:
+    1. Correctly counting connected components using DFS/BFS or Union-Find
+    2. Correctly computing cycles using the Euler formula
+    3. Handling edge cases (empty graphs, disconnected graphs)
+
+# Database Configuration
+database:
+  population_size: 30
+  archive_size: 15
+  num_islands: 3
+  elite_selection_ratio: 0.2
+  exploitation_ratio: 0.7
+
+# Evaluator Configuration
+evaluator:
+  timeout: 30
+  cascade_thresholds: [0.3, 0.6]
+  parallel_evaluations: 2
+
+# Evolution settings
+diff_based_evolution: true
+max_code_length: 10000

@@ -3,27 +3,24 @@ Evaluation system for OpenEvolve
 """
 
 import asyncio
+import hashlib
 import importlib.util
+import inspect
 import json
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 import time
 import traceback
-import uuid
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-import traceback
+from typing import Any
 
 from openevolve.config import EvaluatorConfig
 from openevolve.database import ProgramDatabase
 from openevolve.evaluation_result import EvaluationResult
-from openevolve.database import ProgramDatabase
 from openevolve.llm.ensemble import LLMEnsemble
-from openevolve.utils.async_utils import TaskPool, run_in_executor
 from openevolve.prompt.sampler import PromptSampler
+from openevolve.utils.async_utils import TaskPool
 from openevolve.utils.format_utils import format_metrics_safe
 
 logger = logging.getLogger(__name__)
@@ -41,10 +38,10 @@ class Evaluator:
         self,
         config: EvaluatorConfig,
         evaluation_file: str,
-        llm_ensemble: Optional[LLMEnsemble] = None,
-        prompt_sampler: Optional[PromptSampler] = None,
-        database: Optional[ProgramDatabase] = None,
-        suffix: Optional[str] = ".py",
+        llm_ensemble: LLMEnsemble | None = None,
+        prompt_sampler: PromptSampler | None = None,
+        database: ProgramDatabase | None = None,
+        suffix: str | None = ".py",
     ):
         self.config = config
         self.evaluation_file = evaluation_file
@@ -60,7 +57,7 @@ class Evaluator:
         self._load_evaluation_function()
 
         # Pending artifacts storage for programs
-        self._pending_artifacts: Dict[str, Dict[str, Union[str, bytes]]] = {}
+        self._pending_artifacts: dict[str, dict[str, str | bytes]] = {}
 
         logger.info(f"Initialized evaluator with {evaluation_file}")
 
@@ -76,13 +73,21 @@ class Evaluator:
                 sys.path.insert(0, eval_dir)
                 logger.debug(f"Added {eval_dir} to Python path for local imports")
 
-            spec = importlib.util.spec_from_file_location("evaluation_module", self.evaluation_file)
+            eval_path = os.path.abspath(self.evaluation_file)
+            digest = hashlib.md5(eval_path.encode("utf-8")).hexdigest()[:12]
+            module_name = f"openevolve_evaluation_{digest}"
+            self.evaluation_module_name = module_name
+
+            spec = importlib.util.spec_from_file_location(module_name, self.evaluation_file)
             if spec is None or spec.loader is None:
                 raise ImportError(f"Failed to load spec from {self.evaluation_file}")
 
             module = importlib.util.module_from_spec(spec)
-            sys.modules["evaluation_module"] = module
+            sys.modules[module_name] = module
             spec.loader.exec_module(module)
+
+            # Keep a reference to the loaded module for optional hooks (e.g., phenotype extractors).
+            self.evaluation_module = module
 
             if not hasattr(module, "evaluate"):
                 raise AttributeError(
@@ -92,11 +97,52 @@ class Evaluator:
             self.evaluate_function = module.evaluate
             logger.info(f"Successfully loaded evaluation function from {self.evaluation_file}")
 
+            # Detect whether evaluator supports evolving problem context.
+            self.supports_problem_context = self._supports_problem_context(self.evaluate_function)
+
+            # Optional phenotype extractor hook for discovery mode.
+            self.custom_phenotype_extractor = None
+            if hasattr(module, "extract_phenotype") and callable(module.extract_phenotype):
+                self.custom_phenotype_extractor = module.extract_phenotype
+            elif hasattr(module, "phenotype_extractor"):
+                pe = module.phenotype_extractor
+                if inspect.isclass(pe):
+                    try:
+                        pe = pe()
+                    except Exception:
+                        pe = None
+                if pe is not None and callable(getattr(pe, "extract", None)):
+                    self.custom_phenotype_extractor = pe.extract
+
             # Validate cascade configuration
             self._validate_cascade_configuration(module)
         except Exception as e:
-            logger.error(f"Error loading evaluation function: {str(e)}")
+            logger.error(f"Error loading evaluation function: {e!s}")
             raise
+
+    def _supports_problem_context(self, func) -> bool:
+        """Return True if evaluator function can accept problem_context."""
+        try:
+            sig = inspect.signature(func)
+            params = list(sig.parameters.values())
+            if "problem_context" in sig.parameters:
+                return True
+            if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
+                return True
+            if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
+                return True
+            positional = [
+                p
+                for p in params
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            return len(positional) >= 2
+        except Exception:
+            return False
 
     def _validate_cascade_configuration(self, module) -> None:
         """
@@ -126,20 +172,26 @@ class Evaluator:
                 )
             else:
                 logger.debug(
-                    f"Cascade evaluation properly configured with available stage functions"
+                    "Cascade evaluation properly configured with available stage functions"
                 )
 
     async def evaluate_program(
         self,
         program_code: str,
         program_id: str = "",
-    ) -> Dict[str, float]:
+        problem_context: str | None = None,
+        max_stage: int | None = None,
+        use_llm_feedback: bool | None = None,
+    ) -> dict[str, float]:
         """
         Evaluate a program and return scores
 
         Args:
             program_code: Code to evaluate
             program_id: Optional ID for logging
+            problem_context: Optional evolving problem context
+            max_stage: If cascade enabled, cap evaluation to this stage.
+            use_llm_feedback: Override LLM feedback for this evaluation.
 
         Returns:
             Dictionary of metric name to score
@@ -162,10 +214,16 @@ class Evaluator:
                 # Run evaluation
                 if self.config.cascade_evaluation:
                     # Run cascade evaluation
-                    result = await self._cascade_evaluate(temp_file_path)
+                    result = await self._cascade_evaluate(
+                        temp_file_path,
+                        problem_context=problem_context,
+                        max_stage=max_stage,
+                    )
                 else:
                     # Run direct evaluation
-                    result = await self._direct_evaluate(temp_file_path)
+                    result = await self._direct_evaluate(
+                        temp_file_path, problem_context=problem_context
+                    )
 
                 # Process the result based on type
                 eval_result = self._process_evaluation_result(result)
@@ -186,13 +244,18 @@ class Evaluator:
 
                 # Add LLM feedback if configured
                 llm_eval_result = None
-                if self.config.use_llm_feedback and self.llm_ensemble:
+                llm_feedback_enabled = (
+                    self.config.use_llm_feedback
+                    if use_llm_feedback is None
+                    else bool(use_llm_feedback)
+                )
+                if llm_feedback_enabled and self.llm_ensemble:
                     llm_result = await self._llm_evaluate(program_code, program_id=program_id)
                     llm_eval_result = self._process_evaluation_result(llm_result)
 
-                    # Combine metrics
+                    # Combine metrics from the processed result
                     llm_scores = []
-                    for name, value in llm_result.metrics.items():
+                    for name, value in llm_eval_result.metrics.items():
                         weighted_value = value * self.config.llm_feedback_weight
                         eval_result.metrics[f"llm_{name}"] = weighted_value
                         llm_scores.append(value)  # Use unweighted value for average
@@ -206,12 +269,19 @@ class Evaluator:
 
                         # Recalculate combined_score if it exists
                         if "combined_score" in eval_result.metrics:
-                            # Original combined_score is just accuracy
-                            accuracy = eval_result.metrics["combined_score"]
-                            # Combine with LLM average (70% accuracy, 30% LLM quality)
-                            eval_result.metrics["combined_score"] = (
-                                accuracy * 0.7 + llm_average * 0.3
-                            )
+                            # Preserve raw score and blend with LLM quality.
+                            try:
+                                accuracy = float(eval_result.metrics["combined_score"])
+                                eval_result.metrics["combined_score_raw"] = accuracy
+                                blend = float(self.config.llm_feedback_weight)
+                                blend = max(0.0, min(blend, 1.0))
+                                eval_result.metrics["combined_score"] = (
+                                    accuracy * (1.0 - blend) + llm_average * blend
+                                )
+                            except (TypeError, ValueError):
+                                logger.warning(
+                                    "Skipping LLM blend due to non-numeric combined_score"
+                                )
 
                 # Store artifacts if enabled and present
                 if (
@@ -229,8 +299,7 @@ class Evaluator:
                     if eval_result.has_artifacts():
                         self._pending_artifacts[program_id].update(eval_result.artifacts)
                         logger.debug(
-                            f"Program{program_id_str} returned artifacts: "
-                            f"{eval_result.artifacts}"
+                            f"Program{program_id_str} returned artifacts: {eval_result.artifacts}"
                         )
 
                     if llm_eval_result and llm_eval_result.has_artifacts():
@@ -267,7 +336,7 @@ class Evaluator:
             except Exception as e:
                 last_exception = e
                 logger.warning(
-                    f"Evaluation attempt {attempt + 1}/{self.config.max_retries + 1} failed for program{program_id_str}: {str(e)}"
+                    f"Evaluation attempt {attempt + 1}/{self.config.max_retries + 1} failed for program{program_id_str}: {e!s}"
                 )
                 traceback.print_exc()
 
@@ -291,7 +360,7 @@ class Evaluator:
 
         # All retries failed
         logger.error(
-            f"All evaluation attempts failed for program{program_id_str}. Last error: {str(last_exception)}"
+            f"All evaluation attempts failed for program{program_id_str}. Last error: {last_exception!s}"
         )
         return {"error": 0.0}
 
@@ -304,19 +373,42 @@ class Evaluator:
 
         Returns:
             EvaluationResult instance
+
+        Handles three formats:
+            1. EvaluationResult: Use directly
+            2. Structured dict: {"score": ..., "metrics": {...}, "artifacts": {...}}
+            3. Flat dict (legacy): {"metric1": 0.5, "metric2": 0.8}
         """
-        if isinstance(result, dict):
-            # Backward compatibility - wrap dict in EvaluationResult
-            return EvaluationResult.from_dict(result)
-        elif isinstance(result, EvaluationResult):
+        if isinstance(result, EvaluationResult):
             # New format - use directly
             return result
+        elif isinstance(result, dict):
+            # Check for structured format with nested metrics/artifacts
+            if "metrics" in result and isinstance(result["metrics"], dict):
+                # Structured format - extract metrics and artifacts
+                metrics = dict(result["metrics"])
+
+                # Also include top-level "score" if present
+                if "score" in result and isinstance(result["score"], (int, float)):
+                    # Use score as combined_score if not already present
+                    if "combined_score" not in metrics:
+                        metrics["combined_score"] = float(result["score"])
+
+                # Extract artifacts if present
+                artifacts = {}
+                if "artifacts" in result and isinstance(result["artifacts"], dict):
+                    artifacts = result["artifacts"]
+
+                return EvaluationResult(metrics=metrics, artifacts=artifacts)
+            else:
+                # Flat dict format (legacy) - wrap in EvaluationResult
+                return EvaluationResult.from_dict(result)
         else:
             # Error case - return error metrics
             logger.warning(f"Unexpected evaluation result type: {type(result)}")
             return EvaluationResult(metrics={"error": 0.0})
 
-    def get_pending_artifacts(self, program_id: str) -> Optional[Dict[str, Union[str, bytes]]]:
+    def get_pending_artifacts(self, program_id: str) -> dict[str, str | bytes] | None:
         """
         Get and clear pending artifacts for a program
 
@@ -328,9 +420,52 @@ class Evaluator:
         """
         return self._pending_artifacts.pop(program_id, None)
 
+    def _call_evaluate(
+        self, func, program_path: str, problem_context: str | None = None
+    ) -> dict[str, float] | EvaluationResult:
+        """Call an evaluator function with optional problem context.
+
+        Backward compatible: if the evaluator doesn't accept a second argument,
+        we call it with just program_path.
+        """
+        if problem_context is None:
+            return func(program_path)
+
+        try:
+            sig = inspect.signature(func)
+            params = list(sig.parameters.values())
+            has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+            has_var_pos = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+            positional = [
+                p
+                for p in params
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+
+            if has_var_kw:
+                try:
+                    return func(program_path, problem_context=problem_context)
+                except TypeError:
+                    pass
+
+            if len(positional) >= 2 or has_var_pos:
+                return func(program_path, problem_context)
+        except Exception:
+            # If signature inspection fails, fall back to permissive call
+            try:
+                return func(program_path, problem_context)
+            except TypeError:
+                return func(program_path)
+
+        return func(program_path)
+
     async def _direct_evaluate(
-        self, program_path: str
-    ) -> Union[Dict[str, float], EvaluationResult]:
+        self, program_path: str, problem_context: str | None = None
+    ) -> dict[str, float] | EvaluationResult:
         """
         Directly evaluate a program using the evaluation function with timeout
 
@@ -348,7 +483,9 @@ class Evaluator:
         # Create a coroutine that runs the evaluation function in an executor
         async def run_evaluation():
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self.evaluate_function, program_path)
+            return await loop.run_in_executor(
+                None, self._call_evaluate, self.evaluate_function, program_path, problem_context
+            )
 
         # Run the evaluation with timeout - let exceptions bubble up for retry handling
         result = await asyncio.wait_for(run_evaluation(), timeout=self.config.timeout)
@@ -358,42 +495,38 @@ class Evaluator:
         return result
 
     async def _cascade_evaluate(
-        self, program_path: str
-    ) -> Union[Dict[str, float], EvaluationResult]:
+        self,
+        program_path: str,
+        problem_context: str | None = None,
+        max_stage: int | None = None,
+    ) -> dict[str, float] | EvaluationResult:
         """
         Run cascade evaluation with increasingly challenging test cases
 
         Args:
             program_path: Path to the program file
+            max_stage: Optional cap on cascade stage (1/2/3)
 
         Returns:
             Dictionary of metrics or EvaluationResult with metrics and artifacts
         """
-        # Import the evaluation module to get cascade functions if they exist
         try:
-            # Add the evaluation file's directory to Python path so it can import local modules
-            eval_dir = os.path.dirname(os.path.abspath(self.evaluation_file))
-            if eval_dir not in sys.path:
-                sys.path.insert(0, eval_dir)
-                logger.debug(f"Added {eval_dir} to Python path for cascade evaluation")
-
-            spec = importlib.util.spec_from_file_location("evaluation_module", self.evaluation_file)
-            if spec is None or spec.loader is None:
-                return await self._direct_evaluate(program_path)
-
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-
-            # Check if cascade functions exist
-            if not hasattr(module, "evaluate_stage1"):
-                return await self._direct_evaluate(program_path)
+            module = getattr(self, "evaluation_module", None)
+            if module is None or not hasattr(module, "evaluate_stage1"):
+                return await self._direct_evaluate(program_path, problem_context=problem_context)
 
             # Run first stage with timeout
             try:
 
                 async def run_stage1():
                     loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(None, module.evaluate_stage1, program_path)
+                    return await loop.run_in_executor(
+                        None,
+                        self._call_evaluate,
+                        module.evaluate_stage1,
+                        program_path,
+                        problem_context,
+                    )
 
                 stage1_result = await asyncio.wait_for(run_stage1(), timeout=self.config.timeout)
                 stage1_eval_result = self._process_evaluation_result(stage1_result)
@@ -407,7 +540,7 @@ class Evaluator:
                     },
                 )
             except Exception as e:
-                logger.error(f"Error in stage 1 evaluation: {str(e)}")
+                logger.error(f"Error in stage 1 evaluation: {e!s}")
                 # Capture stage 1 failure with enhanced context
                 error_context = self._create_cascade_error_context("stage1", e)
                 return EvaluationResult(
@@ -418,6 +551,9 @@ class Evaluator:
                         **error_context,
                     },
                 )
+
+            if max_stage is not None and max_stage <= 1:
+                return stage1_eval_result
 
             # Check threshold
             if not self._passes_threshold(
@@ -434,7 +570,13 @@ class Evaluator:
 
                 async def run_stage2():
                     loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(None, module.evaluate_stage2, program_path)
+                    return await loop.run_in_executor(
+                        None,
+                        self._call_evaluate,
+                        module.evaluate_stage2,
+                        program_path,
+                        problem_context,
+                    )
 
                 stage2_result = await asyncio.wait_for(run_stage2(), timeout=self.config.timeout)
                 stage2_eval_result = self._process_evaluation_result(stage2_result)
@@ -451,7 +593,7 @@ class Evaluator:
                 stage1_eval_result.metrics["timeout"] = True
                 return stage1_eval_result
             except Exception as e:
-                logger.error(f"Error in stage 2 evaluation: {str(e)}")
+                logger.error(f"Error in stage 2 evaluation: {e!s}")
                 # Capture stage 2 failure, but keep stage 1 results
                 stage1_eval_result.artifacts.update(
                     {
@@ -481,6 +623,9 @@ class Evaluator:
 
             merged_result = EvaluationResult(metrics=merged_metrics, artifacts=merged_artifacts)
 
+            if max_stage is not None and max_stage <= 2:
+                return merged_result
+
             # Check threshold for stage 3
             if len(self.config.cascade_thresholds) < 2 or not self._passes_threshold(
                 merged_result.metrics, self.config.cascade_thresholds[1]
@@ -496,7 +641,13 @@ class Evaluator:
 
                 async def run_stage3():
                     loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(None, module.evaluate_stage3, program_path)
+                    return await loop.run_in_executor(
+                        None,
+                        self._call_evaluate,
+                        module.evaluate_stage3,
+                        program_path,
+                        problem_context,
+                    )
 
                 stage3_result = await asyncio.wait_for(run_stage3(), timeout=self.config.timeout)
                 stage3_eval_result = self._process_evaluation_result(stage3_result)
@@ -513,7 +664,7 @@ class Evaluator:
                 merged_result.metrics["timeout"] = True
                 return merged_result
             except Exception as e:
-                logger.error(f"Error in stage 3 evaluation: {str(e)}")
+                logger.error(f"Error in stage 3 evaluation: {e!s}")
                 # Capture stage 3 failure, but keep previous results
                 merged_result.artifacts.update(
                     {
@@ -535,7 +686,7 @@ class Evaluator:
             return merged_result
 
         except Exception as e:
-            logger.error(f"Error in cascade evaluation: {str(e)}")
+            logger.error(f"Error in cascade evaluation: {e!s}")
             # Return proper cascade failure result with enhanced context
             error_context = self._create_cascade_error_context("cascade_setup", e)
             return EvaluationResult(
@@ -547,7 +698,9 @@ class Evaluator:
                 },
             )
 
-    async def _llm_evaluate(self, program_code: str, program_id: str = "") -> Dict[str, float]:
+    async def _llm_evaluate(
+        self, program_code: str, program_id: str = ""
+    ) -> EvaluationResult | dict[str, float]:
         """
         Use LLM to evaluate code quality
 
@@ -556,7 +709,7 @@ class Evaluator:
             program_id: Optional ID for logging
 
         Returns:
-            Dictionary of metric name to score
+            EvaluationResult on success, empty dict on error
         """
         if not self.llm_ensemble:
             return {}
@@ -633,11 +786,11 @@ class Evaluator:
                 )
 
             except Exception as e:
-                logger.warning(f"Error parsing LLM response: {str(e)}")
+                logger.warning(f"Error parsing LLM response: {e!s}")
                 return {}
 
         except Exception as e:
-            logger.error(f"Error in LLM evaluation: {str(e)}")
+            logger.error(f"Error in LLM evaluation: {e!s}")
             traceback.print_exc()
             return {}
 
@@ -665,7 +818,7 @@ class Evaluator:
             "evaluation_file": self.evaluation_file,
         }
 
-    def _passes_threshold(self, metrics: Dict[str, float], threshold: float) -> bool:
+    def _passes_threshold(self, metrics: dict[str, float], threshold: float) -> bool:
         """
         Check if metrics pass a threshold
 
@@ -708,8 +861,8 @@ class Evaluator:
 
     async def evaluate_multiple(
         self,
-        programs: List[Tuple[str, str]],
-    ) -> List[Dict[str, float]]:
+        programs: list[tuple[str, str]],
+    ) -> list[dict[str, float]]:
         """
         Evaluate multiple programs in parallel
 

@@ -101,7 +101,7 @@ def _solve_roots_jax(coefficients):
 ```yaml
 llm:
   max_tokens: 128000  # Large context for rich learning
-  
+
 prompt:
   num_top_programs: 5      # Quality examples
   num_diverse_programs: 5  # Exploration diversity
@@ -124,7 +124,7 @@ prompt:
 ❌ **Overly Specific (Avoided):**
 ```yaml
 # Too specific - gives away solution
-• Use jnp.roots(coefficients, strip_zeros=False) 
+• Use jnp.roots(coefficients, strip_zeros=False)
 • Functions should be defined outside classes for JIT compatibility
 ```
 
@@ -197,7 +197,7 @@ llm:
   models:
     - name: "google/gemini-2.5-flash"
       weight: 0.8  # Primary workhorse
-    - name: "google/gemini-2.5-pro" 
+    - name: "google/gemini-2.5-pro"
       weight: 0.2  # Enhanced reasoning
 ```
 
@@ -219,7 +219,7 @@ prompt:
 PERFORMANCE OPTIMIZATION OPPORTUNITIES:
 • **[Library]** - High-level capability description
   Technical requirements without implementation details
-  
+
 PROBLEM-SPECIFIC OPTIMIZATION HINTS:
 • Parameter exploration guidance
 • Algorithmic approach suggestions

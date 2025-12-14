@@ -1,0 +1,70 @@
+# OpenEvolve configuration for Trading ML on sparky.local
+# Evolves feature engineering code, trains XGBoost on sparky
+
+max_iterations: 30
+checkpoint_interval: 5
+
+# LLM Configuration
+llm:
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  # Best models from CLIProxyAPI
+  primary_model: "claude-opus-4-5-20251101"
+  primary_model_weight: 0.7
+
+  secondary_model: "gemini-3-pro-preview"
+  secondary_model_weight: 0.3
+
+  temperature: 0.9
+  top_p: null  # Claude doesn't allow both temperature and top_p
+  max_tokens: 4096
+  timeout: 180  # Longer timeout for training
+
+# Prompt Configuration
+prompt:
+  system_message: |
+    You are an expert quantitative researcher designing alpha features for ML trading models.
+
+    Your task is to evolve the `compute_evolved_features` function that creates features
+    from market data. The features will be used to train XGBoost classifiers.
+
+    Available input data (df):
+    - open, high, low, close, volume: OHLCV data
+    - returns: Daily returns
+
+    Available base features (base_features):
+    - mom_5, mom_10, mom_20, mom_60: Momentum at different horizons
+    - vol_10, vol_20, vol_60: Rolling volatility
+    - rsi_14: RSI indicator
+    - ma_cross_10_50, ma_cross_20_100: Moving average crossovers
+    - volume_ratio: Volume relative to 20-day average
+    - price_position: Price position in 20-day range
+
+    Guidelines for good alpha features:
+    1. Combine multiple signals (e.g., momentum + volatility)
+    2. Use ratios and normalizations for stationarity
+    3. Consider different time horizons
+    4. Look for mean reversion AND momentum effects
+    5. Volume often confirms price moves
+    6. Extreme values (RSI, position) can signal reversals
+
+    The goal is to maximize Sharpe ratio in walk-forward backtesting.
+
+# Database Configuration - smaller for faster iteration
+database:
+  population_size: 20
+  archive_size: 10
+  num_islands: 2
+  elite_selection_ratio: 0.3
+  exploitation_ratio: 0.7  # More exploitation, features are specific
+
+# Evaluator Configuration
+evaluator:
+  timeout: 180  # Training takes ~60-120s
+  cascade_thresholds: [0.2, 0.4]
+  parallel_evaluations: 1  # Sequential - each trains on sparky
+
+# Evolution settings
+diff_based_evolution: true
+max_code_length: 8000

@@ -4,12 +4,13 @@ Unified evaluation script for GEPA benchmark datasets.
 Can evaluate baseline or evolved prompts on IFEval, HoVer, and HotpotQA.
 """
 
-import os
-import json
-import yaml
-import time
 import argparse
+import json
+import os
+import time
 from datetime import datetime
+
+import yaml
 from datasets import load_dataset
 from openai import OpenAI
 from tqdm import tqdm
@@ -34,7 +35,7 @@ def load_prompt(dataset_name, prompt_type="baseline"):
     if not os.path.exists(prompt_path):
         raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
 
-    with open(prompt_path, "r") as f:
+    with open(prompt_path) as f:
         return f.read().strip()
 
 
@@ -42,7 +43,7 @@ def load_dataset_config(dataset_name):
     """Load dataset configuration."""
     config_path = f"{dataset_name}_prompt_dataset.yaml"
 
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 
@@ -344,7 +345,7 @@ def main():
     # Load baseline results for comparison
     baseline_results = {}
     if os.path.exists("baseline_results_50samples.json"):
-        with open("baseline_results_50samples.json", "r") as f:
+        with open("baseline_results_50samples.json") as f:
             baseline_data = json.load(f)
             for result in baseline_data.get("results", []):
                 baseline_results[result["dataset"]] = result["accuracy"]
@@ -358,7 +359,7 @@ def main():
     if args.samples:
         print(f"Samples per dataset: {args.samples}")
     else:
-        print(f"Samples per dataset: Full dataset")
+        print("Samples per dataset: Full dataset")
     print(f"{'='*60}")
 
     for dataset_name in datasets:
@@ -409,7 +410,7 @@ def main():
             print(f"  Time: {elapsed_time:.1f}s ({elapsed_time/total:.1f}s per sample)")
 
         except Exception as e:
-            print(f"Error evaluating {dataset_name}: {str(e)}")
+            print(f"Error evaluating {dataset_name}: {e!s}")
             all_results.append(
                 {
                     "dataset": dataset_name,
@@ -463,7 +464,7 @@ def main():
                 print(f"  vs Baseline: {result['improvement_percent']:+.1f}%")
 
     if "summary" in final_results:
-        print(f"\nAGGREGATE:")
+        print("\nAGGREGATE:")
         print(f"  Overall Accuracy: {final_results['summary']['aggregate_accuracy']:.3f}")
         print(f"  Total Samples: {final_results['summary']['total_samples']}")
 

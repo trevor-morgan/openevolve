@@ -76,11 +76,58 @@ prompt:
   # Feature extraction and program labeling thresholds
   # These control how the LLM perceives and categorizes programs
   suggest_simplification_after_chars: 500     # Suggest simplifying if program exceeds this many characters
-  include_changes_under_chars: 100           # Include change descriptions in features if under this length  
+  include_changes_under_chars: 100           # Include change descriptions in features if under this length
   concise_implementation_max_lines: 10        # Label as "concise" if program has this many lines or fewer
   comprehensive_implementation_min_lines: 50  # Label as "comprehensive" if program has this many lines or more
 
-  # Note: meta-prompting features are not yet implemented
+  # Meta-prompting configuration
+  # Enables evolving prompt strategies alongside code using multi-armed bandit algorithms
+  # The system learns which prompt strategies (e.g., "focus on vectorization", "try algorithmic restructuring")
+  # lead to fitness improvements and adapts selection probabilities accordingly
+  meta_prompting:
+    enabled: false                    # Enable meta-prompting (learns effective prompt strategies)
+
+    # Strategy selection algorithm
+    # - "thompson_sampling": Bayesian approach, good exploration-exploitation balance (recommended)
+    # - "ucb": Upper Confidence Bound, deterministic exploration
+    # - "epsilon_greedy": Simple random exploration with probability epsilon
+    selection_algorithm: "thompson_sampling"
+
+    # Algorithm-specific parameters
+    ucb_exploration_constant: 2.0     # C in UCB formula: mean + C * sqrt(log(n)/n_i)
+    epsilon: 0.1                      # For epsilon-greedy: probability of random exploration
+    thompson_prior_alpha: 1.0         # Beta distribution prior (successes)
+    thompson_prior_beta: 1.0          # Beta distribution prior (failures)
+
+    # Reward calculation
+    # - "improvement": Raw fitness delta (child - parent)
+    # - "normalized": Delta normalized by parent fitness
+    # - "rank": Binary 1.0 if improved, 0.0 otherwise
+    reward_type: "improvement"
+    improvement_threshold: 0.0        # Minimum delta for positive reward
+
+    # Prompt blending
+    meta_prompt_weight: 0.1           # Weight of meta-prompt in final prompt
+    # Position in prompt:
+    # - "prefix": Add before user prompt
+    # - "suffix": Add after user prompt
+    # - "section": Insert as dedicated section (recommended)
+    meta_prompt_position: "section"
+
+    # Strategy granularity
+    per_island_strategies: true       # Track strategies per island
+    context_aware: true               # Adapt based on fitness range, generation, etc.
+
+    # Exploration schedule
+    exploration_decay: 0.995          # Reduce exploration over iterations
+    min_exploration: 0.05             # Minimum exploration rate
+
+    # History and persistence
+    max_history_per_strategy: 1000    # Cap history to prevent memory bloat
+    warmup_iterations: 50             # Random selection during warmup (gather initial data)
+
+    # Custom strategies file (optional)
+    strategies_file: null             # Path to custom meta_fragments.json
 
 # Database configuration
 database:
@@ -108,7 +155,7 @@ database:
 
   # Feature map dimensions for MAP-Elites
   # Default if not specified: ["complexity", "diversity"]
-  # 
+  #
   # Built-in features (always available, computed by OpenEvolve):
   #   - "complexity": Code length
   #   - "diversity": Code structure diversity
@@ -122,7 +169,7 @@ database:
   #   - "performance"                 # Must be returned by your evaluator
   #   - "correctness"                 # Must be returned by your evaluator
   #   - "memory_efficiency"           # Must be returned by your evaluator
-  
+
   # Number of bins per dimension
   # Can be a single integer (same for all dimensions) or a dict
   feature_bins: 10                    # Number of bins per dimension
@@ -131,14 +178,14 @@ database:
   #   complexity: 10                  # 10 bins for complexity
   #   diversity: 15                   # 15 bins for diversity
   #   performance: 20                 # 20 bins for custom metric
-  
+
   diversity_reference_size: 20        # Size of reference set for diversity calculation
 
 # Evaluator configuration
 evaluator:
   # Fitness calculation: Uses 'combined_score' if available, otherwise averages
   # all metrics EXCEPT those listed in database.feature_dimensions
-  
+
   # General settings
   timeout: 300                        # Maximum evaluation time in seconds
   max_retries: 3                      # Maximum number of retries for evaluation
@@ -170,6 +217,69 @@ evolution_trace:
   output_path: null                   # Path for trace output (defaults to output_dir/evolution_trace.{format})
   buffer_size: 10                     # Number of traces to buffer before writing
   compress: false                     # Compress output file (jsonl only)
+
+# RL-based Adaptive Selection configuration
+# Learns optimal selection policies during evolution using contextual bandits
+# Complements meta-prompting: RL handles "what to select", meta-prompting handles "how to prompt"
+rl:
+  enabled: false                      # Enable RL-based adaptive selection
+
+  # Algorithm selection
+  # - "contextual_thompson": Bayesian contextual bandit (recommended - good exploration/exploitation)
+  # - "contextual_ucb": Upper Confidence Bound contextual bandit
+  # - "epsilon_greedy": Simple epsilon-greedy baseline
+  algorithm: "contextual_thompson"
+
+  # State features to observe
+  # These features form the "context" for contextual bandits
+  state_features:
+    - "normalized_iteration"          # Current iteration / max iterations
+    - "best_fitness"                  # Best fitness so far (normalized)
+    - "fitness_improvement_rate"      # Recent improvement rate
+    - "population_diversity"          # Edit distance diversity
+    - "archive_coverage"              # MAP-Elites grid coverage fraction
+    - "generations_without_improvement"  # Stagnation indicator
+    - "recent_exploration_success"    # Success rate of exploration actions
+    - "recent_exploitation_success"   # Success rate of exploitation actions
+
+  # Reward calculation weights
+  reward:
+    fitness_weight: 0.6               # Weight for fitness improvement
+    diversity_weight: 0.2             # Weight for diversity maintenance
+    novelty_weight: 0.1               # Weight for behavioral novelty
+    efficiency_weight: 0.1            # Weight for efficiency
+    improvement_threshold: 0.0        # Minimum improvement for positive reward
+    plateau_penalty: 0.1              # Penalty per N iterations without improvement
+    plateau_window: 50                # Iterations for plateau detection
+
+  # Learning parameters
+  learning_rate: 0.01                 # For Bayesian updates
+  discount_factor: 0.99               # For temporal credit assignment
+  exploration_bonus: 2.0              # UCB exploration constant
+
+  # Warmup and exploration schedule
+  warmup_iterations: 100              # Random policy during warmup (gather initial data)
+  exploration_decay: 0.995            # Decay rate for exploration
+  min_exploration: 0.05               # Minimum exploration probability
+
+  # Action tracking for credit assignment
+  action_history_size: 100            # How many recent actions to track per type
+  success_window: 20                  # Window for computing success rates
+
+  # Offline pre-training (optional)
+  pretrain_from_traces: false         # Pre-train from historical evolution traces
+  trace_path: null                    # Path to evolution traces for pre-training
+
+  # Extended action control (optional)
+  control_temperature: false          # Also learn temperature adjustment
+  control_diff_mode: false            # Also learn diff vs full rewrite decision
+  temperature_range: [0.3, 1.0]       # Temperature bounds if control_temperature enabled
+
+  # Per-island learning
+  per_island_policies: true           # Separate policy per island
+
+  # Checkpoint and persistence
+  save_detailed_stats: true           # Save detailed action statistics
 
 # Discovery Mode configuration
 # Enables scientific discovery features: problem evolution, adversarial testing, and surprise-based exploration

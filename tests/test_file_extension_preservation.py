@@ -6,12 +6,13 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
-from openevolve.config import Config, EvaluatorConfig, DatabaseConfig, LLMConfig, PromptConfig
-from openevolve.controller import OpenEvolve
+from openevolve.config import Config, DatabaseConfig, EvaluatorConfig, LLMConfig, PromptConfig
 from openevolve.evaluator import Evaluator
-from openevolve.process_parallel import ProcessParallelController, _worker_init, _lazy_init_worker_components
+from openevolve.process_parallel import (
+    ProcessParallelController,
+)
 
 
 class TestFileExtensionPreservation(unittest.TestCase):
@@ -34,17 +35,13 @@ class TestFileExtensionPreservation(unittest.TestCase):
     def tearDown(self):
         """Clean up test fixtures"""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_controller_preserves_file_extension(self):
         """Test that the controller properly extracts and stores file extension"""
         # Test Path extraction directly
-        test_files = [
-            "test.cpp",
-            "test.rs",
-            "test.py",
-            "test.r"
-        ]
+        test_files = ["test.cpp", "test.rs", "test.py", "test.r"]
 
         for filename in test_files:
             with self.subTest(filename=filename):
@@ -61,7 +58,7 @@ class TestFileExtensionPreservation(unittest.TestCase):
             (".rs", "rust"),
             (".r", "r"),
             (".js", "javascript"),
-            (".metal", "metal")
+            (".metal", "metal"),
         ]
 
         for suffix, language in test_cases:
@@ -85,13 +82,13 @@ class TestFileExtensionPreservation(unittest.TestCase):
         mock_config.file_suffix = ".cpp"
 
         # Test getattr access pattern used in the code
-        suffix = getattr(mock_config, 'file_suffix', '.py')
+        suffix = getattr(mock_config, "file_suffix", ".py")
         self.assertEqual(suffix, ".cpp")
 
         # Test default fallback
         mock_config_no_suffix = MagicMock()
         del mock_config_no_suffix.file_suffix
-        suffix_default = getattr(mock_config_no_suffix, 'file_suffix', '.py')
+        suffix_default = getattr(mock_config_no_suffix, "file_suffix", ".py")
         self.assertEqual(suffix_default, ".py")
 
     def test_process_parallel_controller_passes_suffix(self):
@@ -101,10 +98,7 @@ class TestFileExtensionPreservation(unittest.TestCase):
 
         # Create ProcessParallelController with specific file suffix
         controller = ProcessParallelController(
-            self.config,
-            "dummy_evaluator.py",
-            mock_database,
-            file_suffix=".rs"
+            self.config, "dummy_evaluator.py", mock_database, file_suffix=".rs"
         )
 
         # Check that file suffix is stored
@@ -118,7 +112,7 @@ class TestFileExtensionPreservation(unittest.TestCase):
             ("test.rs", ".rs"),
             ("test.r", ".r"),
             ("test.js", ".js"),
-            ("test.metal", ".metal")
+            ("test.metal", ".metal"),
         ]
 
         for filename, expected_extension in test_files:

@@ -2,10 +2,8 @@
 Prompt templates for OpenEvolve
 """
 
-import os
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
 
 # Base system message template for evolution
 BASE_SYSTEM_TEMPLATE = """You are an expert software developer tasked with iteratively improving a codebase.
@@ -491,7 +489,7 @@ DEFAULT_TEMPLATES = {
 class TemplateManager:
     """Manages templates with cascading override support"""
 
-    def __init__(self, custom_template_dir: Optional[str] = None):
+    def __init__(self, custom_template_dir: str | None = None):
         # Get default template directory
         self.default_dir = Path(__file__).parent.parent / "prompts" / "defaults"
         self.custom_dir = Path(custom_template_dir) if custom_template_dir else None
@@ -500,10 +498,13 @@ class TemplateManager:
         self.templates = {}
         self.fragments = {}
 
-        # 1. Load defaults
+        # 1. Load built-in templates from DEFAULT_TEMPLATES dict
+        self.templates.update(DEFAULT_TEMPLATES)
+
+        # 2. Load from default directory (overrides built-ins)
         self._load_from_directory(self.default_dir)
 
-        # 2. Override with custom templates (if provided)
+        # 3. Override with custom templates (if provided)
         if self.custom_dir and self.custom_dir.exists():
             self._load_from_directory(self.custom_dir)
 
@@ -515,13 +516,13 @@ class TemplateManager:
         # Load .txt templates
         for txt_file in directory.glob("*.txt"):
             template_name = txt_file.stem
-            with open(txt_file, "r") as f:
+            with open(txt_file) as f:
                 self.templates[template_name] = f.read()
 
         # Load fragments.json if exists
         fragments_file = directory / "fragments.json"
         if fragments_file.exists():
-            with open(fragments_file, "r") as f:
+            with open(fragments_file) as f:
                 loaded_fragments = json.load(f)
                 self.fragments.update(loaded_fragments)
 

@@ -54,29 +54,30 @@ Consider these algorithmic improvements for enhanced performance:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import random
+
 import numpy as np
 from scipy.linalg import lu
-from typing import Any, Dict, List, Optional
+
 
 class LUFactorization:
     """
     Initial implementation of lu_factorization task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the LUFactorization."""
         pass
-    
+
     def solve(self, problem):
         """
         Solve the lu_factorization problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to lu_factorization
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -96,19 +97,19 @@ class LUFactorization:
             P, L, U = lu(A)
             solution = {"LU": {"P": P.tolist(), "L": L.tolist(), "U": U.tolist()}}
             return solution
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -177,10 +178,16 @@ class LUFactorization:
                 return False
             row_sums = P.sum(axis=1)
             col_sums = P.sum(axis=0)
-            if not (np.all(np.isclose(row_sums, 1.0, atol=atol)) and np.all(np.isclose(col_sums, 1.0, atol=atol))):
+            if not (
+                np.all(np.isclose(row_sums, 1.0, atol=atol))
+                and np.all(np.isclose(col_sums, 1.0, atol=atol))
+            ):
                 logging.error("P rows/columns do not each sum to 1 (not a valid permutation).")
                 return False
-            if not (np.allclose(P @ P.T, I, rtol=rtol, atol=atol) and np.allclose(P.T @ P, I, rtol=rtol, atol=atol)):
+            if not (
+                np.allclose(P @ P.T, I, rtol=rtol, atol=atol)
+                and np.allclose(P.T @ P, I, rtol=rtol, atol=atol)
+            ):
                 logging.error("P is not orthogonal (P P^T != I).")
                 return False
 
@@ -201,24 +208,26 @@ class LUFactorization:
                 return False
 
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = LUFactorization()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

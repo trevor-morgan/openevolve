@@ -49,7 +49,15 @@ htmlcov/
 # Misc
 .DS_Store
 .venv
+.env
+.env.*
+.cache/
+.claude/
 
 # For SR
 secrets.yaml
 problems
+
+# Local demo outputs
+heisenberg_demo_output/
+matrix_output/

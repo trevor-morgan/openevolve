@@ -9,13 +9,13 @@ readurls plugin, allowing it to understand the specific HTML structure
 and improve the parsing logic accordingly.
 """
 
-from bs4 import BeautifulSoup
-from typing import Dict, List, Optional
 import re
+
+from bs4 import BeautifulSoup
 
 
 # EVOLVE-BLOCK-START
-def scrape_api_docs(html_content: str) -> List[Dict[str, any]]:
+def scrape_api_docs(html_content: str) -> list[dict[str, any]]:
     """
     Extract API documentation from HTML content.
 
@@ -75,7 +75,7 @@ def scrape_api_docs(html_content: str) -> List[Dict[str, any]]:
     return functions[:20]  # Return more functions
 
 
-def extract_parameters(signature: str) -> List[Dict[str, str]]:
+def extract_parameters(signature: str) -> list[dict[str, str]]:
     """
     Extract parameter information from a function signature.
 
@@ -107,7 +107,7 @@ def extract_parameters(signature: str) -> List[Dict[str, str]]:
     return params
 
 
-def format_documentation(api_docs: List[Dict[str, any]]) -> str:
+def format_documentation(api_docs: list[dict[str, any]]) -> str:
     """
     Format extracted documentation into a readable string.
 

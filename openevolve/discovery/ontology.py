@@ -18,8 +18,7 @@ import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,19 +47,19 @@ class Variable:
     name: str
     var_type: str = "continuous"  # "continuous", "categorical", "latent"
     source: str = "user"  # "user", "probe", "inferred"
-    discovery_method: Optional[str] = None
-    extraction_code: Optional[str] = None
+    discovery_method: str | None = None
+    extraction_code: str | None = None
     confidence: float = 1.0
     description: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Variable":
+    def from_dict(cls, data: dict[str, Any]) -> "Variable":
         """Deserialize from dictionary"""
         return cls(**data)
 
@@ -98,13 +97,13 @@ class Ontology:
 
     id: str
     generation: int = 0
-    parent_id: Optional[str] = None
-    variables: List[Variable] = field(default_factory=list)
-    discovered_via: Optional[str] = None
+    parent_id: str | None = None
+    variables: list[Variable] = field(default_factory=list)
+    discovered_via: str | None = None
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return {
             "id": self.id,
@@ -117,7 +116,7 @@ class Ontology:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Ontology":
+    def from_dict(cls, data: dict[str, Any]) -> "Ontology":
         """Deserialize from dictionary"""
         variables = [Variable.from_dict(v) for v in data.get("variables", [])]
         return cls(
@@ -152,11 +151,11 @@ class Ontology:
 
         return "\n".join(lines)
 
-    def get_variable_names(self) -> List[str]:
+    def get_variable_names(self) -> list[str]:
         """Get list of variable names"""
         return [v.name for v in self.variables]
 
-    def get_variable(self, name: str) -> Optional[Variable]:
+    def get_variable(self, name: str) -> Variable | None:
         """Get a variable by name"""
         for var in self.variables:
             if var.name == name:
@@ -218,15 +217,15 @@ class OntologyManager:
     """
 
     def __init__(self):
-        self.ontology_history: Dict[str, Ontology] = {}
-        self.current_ontology: Optional[Ontology] = None
+        self.ontology_history: dict[str, Ontology] = {}
+        self.current_ontology: Ontology | None = None
 
         logger.info("Initialized OntologyManager")
 
     def create_genesis_ontology(
         self,
-        variable_names: List[str] = None,
-        variables: List[Variable] = None,
+        variable_names: list[str] = None,
+        variables: list[Variable] = None,
     ) -> Ontology:
         """
         Create the initial (genesis) ontology.
@@ -242,8 +241,7 @@ class OntologyManager:
             vars_list = variables
         elif variable_names:
             vars_list = [
-                Variable(name=name, source="user", confidence=1.0)
-                for name in variable_names
+                Variable(name=name, source="user", confidence=1.0) for name in variable_names
             ]
         else:
             vars_list = []
@@ -268,8 +266,8 @@ class OntologyManager:
 
     def expand_ontology(
         self,
-        new_variables: List[Variable],
-        discovered_via: Optional[str] = None,
+        new_variables: list[Variable],
+        discovered_via: str | None = None,
     ) -> Ontology:
         """
         Expand the current ontology with newly discovered variables.
@@ -290,10 +288,7 @@ class OntologyManager:
             return self.create_genesis_ontology(variables=new_variables)
 
         # Inherit all variables from parent
-        inherited_vars = [
-            Variable.from_dict(v.to_dict())
-            for v in self.current_ontology.variables
-        ]
+        inherited_vars = [Variable.from_dict(v.to_dict()) for v in self.current_ontology.variables]
 
         # Add new variables (avoid duplicates by name)
         existing_names = {v.name for v in inherited_vars}
@@ -302,9 +297,7 @@ class OntologyManager:
                 inherited_vars.append(new_var)
                 existing_names.add(new_var.name)
             else:
-                logger.warning(
-                    f"Variable '{new_var.name}' already exists in ontology - skipping"
-                )
+                logger.warning(f"Variable '{new_var.name}' already exists in ontology - skipping")
 
         # Create new ontology generation
         new_ontology = Ontology(
@@ -331,7 +324,7 @@ class OntologyManager:
 
         return new_ontology
 
-    def get_lineage(self, ontology_id: Optional[str] = None) -> List[Ontology]:
+    def get_lineage(self, ontology_id: str | None = None) -> list[Ontology]:
         """
         Get the full lineage of an ontology back to genesis.
 
@@ -356,7 +349,7 @@ class OntologyManager:
 
         return list(reversed(lineage))
 
-    def get_new_variables_since(self, generation: int) -> List[Variable]:
+    def get_new_variables_since(self, generation: int) -> list[Variable]:
         """
         Get all variables discovered since a given generation.
 
@@ -398,8 +391,7 @@ class OntologyManager:
 
         data = {
             "ontology_history": {
-                oid: onto.to_dict()
-                for oid, onto in self.ontology_history.items()
+                oid: onto.to_dict() for oid, onto in self.ontology_history.items()
             },
             "current_ontology_id": self.current_ontology.id if self.current_ontology else None,
         }
@@ -418,7 +410,7 @@ class OntologyManager:
         Args:
             path: Path to load the ontology state from
         """
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
 
         self.ontology_history = {
@@ -436,7 +428,7 @@ class OntologyManager:
             f"Loaded ontology history with {len(self.ontology_history)} ontologies from {path}"
         )
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get statistics about ontology evolution"""
         if self.current_ontology is None:
             return {

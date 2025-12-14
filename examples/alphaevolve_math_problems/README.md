@@ -1,6 +1,6 @@
 ## AlphaEvolve mathematical problems
 
-This folder contains the necessary evaluator and initial program files for all of the 14 problems from [AlphaEvolve's Appendices A and B](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/AlphaEvolve.pdf). The circle packing problem was among the first implemented by OpenEvolve. This folder implements the remaining 13 problems. 
+This folder contains the necessary evaluator and initial program files for all of the 14 problems from [AlphaEvolve's Appendices A and B](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/AlphaEvolve.pdf). The circle packing problem was among the first implemented by OpenEvolve. This folder implements the remaining 13 problems.
 
 Not all problems take the form of a maximization problem, however in order to make this problem set more standardized we chose to **make it so all evaluator files are aiming to maximize the target metric**. We achieve by some straightforward algebraic manipulation, but this can be easily edited and changed if the user finds it necessary.
 

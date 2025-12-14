@@ -13,12 +13,12 @@ Goal: 5-15% performance improvement through custom Metal kernel optimization
 Evolution Target: The Metal kernel source code that computes GQA attention
 """
 
+import math
+import time
+from typing import Any
+
 import mlx.core as mx
 import mlx.nn as nn
-import numpy as np
-import math
-from typing import Optional, Tuple, Any
-import time
 
 
 def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
@@ -72,61 +72,61 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
     // Qwen3 GQA Metal Kernel - Optimized for 40:8 head pattern
     // Thread mapping: each thread processes one query position
     uint thread_id = thread_position_in_grid.x;
-    uint head_idx = thread_position_in_grid.y; 
+    uint head_idx = thread_position_in_grid.y;
     uint batch_idx = thread_position_in_grid.z;
     uint query_pos = thread_id;
-    
+
     // Bounds checking
     if (batch_idx >= BATCH_SIZE || head_idx >= NUM_HEADS || query_pos >= SEQ_LEN) {
         return;
     }
-    
+
     // Extract scalar values from input arrays
     T scale_val = scale[0];
     bool use_mask_val = use_mask[0] > 0;
-    
+
     // GQA mapping: determine which KV head corresponds to this query head
     uint kv_head_idx = head_idx / HEADS_PER_KV;  // 5 query heads per KV head
-    
+
     // Pre-calculate base indices for memory access optimization
-    const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) + 
-                        head_idx * (SEQ_LEN * HEAD_DIM) + 
+    const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) +
+                        head_idx * (SEQ_LEN * HEAD_DIM) +
                         query_pos * HEAD_DIM;
-                        
-    const uint k_base_start = batch_idx * (NUM_KV_HEADS * SEQ_LEN * HEAD_DIM) + 
+
+    const uint k_base_start = batch_idx * (NUM_KV_HEADS * SEQ_LEN * HEAD_DIM) +
                               kv_head_idx * (SEQ_LEN * HEAD_DIM);
-                              
+
     const uint v_base_start = k_base_start;  // Values have same layout as keys
-    
-    const uint mask_base = batch_idx * (NUM_HEADS * SEQ_LEN * SEQ_LEN) + 
-                           head_idx * (SEQ_LEN * SEQ_LEN) + 
+
+    const uint mask_base = batch_idx * (NUM_HEADS * SEQ_LEN * SEQ_LEN) +
+                           head_idx * (SEQ_LEN * SEQ_LEN) +
                            query_pos * SEQ_LEN;
-                           
+
     const uint out_base = q_base;
-    
+
     // Load query vector for this position (coalesced memory access)
     T query_vec[HEAD_DIM];
     for (uint d = 0; d < HEAD_DIM; d++) {
         query_vec[d] = queries[q_base + d];
     }
-    
+
     // First pass: compute attention scores and find maximum for numerical stability
     T max_score = T(-INFINITY);
     T scores[SEQ_LEN];  // Cache scores to avoid recomputation
-    
+
     for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
         // Check attention mask
         bool is_valid = use_mask_val ? mask[mask_base + key_pos] : true;
-        
+
         if (!is_valid) {
             scores[key_pos] = T(-INFINITY);
             continue;
         }
-        
+
         // Compute Q @ K^T for this key position
         const uint k_base = k_base_start + key_pos * HEAD_DIM;
         T score = T(0.0);
-        
+
         // Vectorized dot product - process 4 elements at a time for efficiency
         for (uint d = 0; d < HEAD_DIM; d += 4) {
             if (d + 3 < HEAD_DIM) {
@@ -143,13 +143,13 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
                 break;
             }
         }
-        
+
         // Apply attention scaling
         score *= scale_val;
         scores[key_pos] = score;
         max_score = max(max_score, score);
     }
-    
+
     // Second pass: compute softmax denominator
     T sum_exp = T(0.0);
     for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
@@ -161,20 +161,20 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
             scores[key_pos] = T(0.0);
         }
     }
-    
+
     // Initialize output to zero
     for (uint d = 0; d < HEAD_DIM; d++) {
         output[out_base + d] = T(0.0);
     }
-    
+
     // Third pass: compute weighted sum of values
     if (sum_exp > T(0.0)) {
         for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
             T attention_weight = scores[key_pos] / sum_exp;
-            
+
             if (attention_weight > T(0.0)) {
                 const uint v_base = v_base_start + key_pos * HEAD_DIM;
-                
+
                 // Vectorized accumulation for better performance
                 for (uint d = 0; d < HEAD_DIM; d += 4) {
                     if (d + 3 < HEAD_DIM) {
@@ -282,16 +282,16 @@ class CustomGQAAttention(nn.Module):
             print("⚠️ Could not import mlx_lm rope_utils, using basic RoPE")
             self.rope = None
 
-        print(f"🔧 Initialized Custom Metal GQA Attention")
+        print("🔧 Initialized Custom Metal GQA Attention")
         print(f"   📊 Architecture: {n_heads}:{n_kv_heads} heads ({n_heads//n_kv_heads}:1 ratio)")
         print(f"   🎯 Head dimension: {head_dim}")
-        print(f"   ⚡ Using custom Metal kernel for GQA optimization")
+        print("   ⚡ Using custom Metal kernel for GQA optimization")
 
     def __call__(
         self,
         x: mx.array,
-        mask: Optional[mx.array] = None,
-        cache: Optional[Any] = None,
+        mask: mx.array | None = None,
+        cache: Any | None = None,
     ) -> mx.array:
         B, L, D = x.shape
 

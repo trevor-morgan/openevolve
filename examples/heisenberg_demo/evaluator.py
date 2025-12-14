@@ -15,8 +15,7 @@ because you're missing a variable in your model of the problem.
 
 import random
 import time
-from typing import Any, Dict, List, Tuple
-
+from typing import Any
 
 # =============================================================================
 # HIDDEN VARIABLES (the program doesn't know about these!)
@@ -30,7 +29,7 @@ CACHE_HIT_LATENCY = 1
 CACHE_MISS_LATENCY = 100
 
 
-def simulate_memory_access(access_pattern: List[int], data_size: int) -> Dict[str, Any]:
+def simulate_memory_access(access_pattern: list[int], data_size: int) -> dict[str, Any]:
     """
     Simulate memory access with cache effects.
 
@@ -61,8 +60,7 @@ def simulate_memory_access(access_pattern: List[int], data_size: int) -> Dict[st
 
     # Simulated time based on cache behavior
     simulated_time = (
-        cache_hits * CACHE_HIT_LATENCY +
-        cache_misses * CACHE_MISS_LATENCY
+        cache_hits * CACHE_HIT_LATENCY + cache_misses * CACHE_MISS_LATENCY
     ) / 1000  # Convert to microseconds
 
     return {
@@ -74,7 +72,7 @@ def simulate_memory_access(access_pattern: List[int], data_size: int) -> Dict[st
     }
 
 
-def _calculate_locality(access_pattern: List[int]) -> float:
+def _calculate_locality(access_pattern: list[int]) -> float:
     """Calculate a locality score (0-1) based on access pattern."""
     if len(access_pattern) < 2:
         return 1.0
@@ -91,9 +89,13 @@ def _calculate_locality(access_pattern: List[int]) -> float:
 # EVALUATION FUNCTIONS
 # =============================================================================
 
-def evaluate(code: str) -> Dict[str, Any]:
+
+def evaluate(program_path: str) -> dict[str, Any]:
     """
     Evaluate a sorting program.
+
+    Args:
+        program_path: Path to the Python file to evaluate
 
     The fitness is affected by:
     1. Correctness (does it sort correctly?)
@@ -104,6 +106,16 @@ def evaluate(code: str) -> Dict[str, Any]:
     time complexity but don't know about cache effects.
     """
     artifacts = {}
+
+    # Read the program code from the file
+    try:
+        with open(program_path) as f:
+            code = f.read()
+    except Exception as e:
+        return {
+            "combined_score": 0.0,
+            "error": f"Failed to read program file: {e}",
+        }
 
     try:
         # Execute the code
@@ -138,10 +150,7 @@ def evaluate(code: str) -> Dict[str, Any]:
 
         # Calculate combined score
         # Note: cache effects are baked into perf_score but not explicitly
-        combined = (
-            correctness_score * 0.4 +
-            perf_score * 0.6
-        )
+        combined = correctness_score * 0.4 + perf_score * 0.6
 
         return {
             "combined_score": combined,
@@ -158,7 +167,7 @@ def evaluate(code: str) -> Dict[str, Any]:
         }
 
 
-def _test_correctness(sort_func) -> Tuple[float, Dict]:
+def _test_correctness(sort_func) -> tuple[float, dict]:
     """Test sorting correctness."""
     test_cases = [
         [],
@@ -185,19 +194,21 @@ def _test_correctness(sort_func) -> Tuple[float, Dict]:
                 passed += 1
                 details.append({"test": i, "passed": True})
             else:
-                details.append({
-                    "test": i,
-                    "passed": False,
-                    "expected_len": len(expected),
-                    "got_len": len(result),
-                })
+                details.append(
+                    {
+                        "test": i,
+                        "passed": False,
+                        "expected_len": len(expected),
+                        "got_len": len(result),
+                    }
+                )
         except Exception as e:
             details.append({"test": i, "passed": False, "error": str(e)})
 
     return passed / len(test_cases), {"tests": details, "passed": passed, "total": len(test_cases)}
 
 
-def _test_performance(sort_func) -> Tuple[float, Dict, Dict]:
+def _test_performance(sort_func) -> tuple[float, dict, dict]:
     """
     Test sorting performance.
 
@@ -238,28 +249,34 @@ def _test_performance(sort_func) -> Tuple[float, Dict, Dict]:
 
             # Analyze cache behavior (HIDDEN from the program!)
             cache_info = simulate_memory_access(access_pattern, size)
-            cache_analysis.append({
-                "size": size,
-                **cache_info,
-            })
+            cache_analysis.append(
+                {
+                    "size": size,
+                    **cache_info,
+                }
+            )
 
             # Adjust elapsed time based on cache behavior
             # This simulates real hardware behavior where cache misses are expensive
             cache_penalty = 1.0 + (1.0 - cache_info["cache_hit_rate"]) * 2.0
             adjusted_time = elapsed * cache_penalty
 
-            results.append({
-                "size": size,
-                "raw_time": elapsed,
-                "adjusted_time": adjusted_time,
-                "accesses": len(access_pattern),
-            })
+            results.append(
+                {
+                    "size": size,
+                    "raw_time": elapsed,
+                    "adjusted_time": adjusted_time,
+                    "accesses": len(access_pattern),
+                }
+            )
 
         except Exception as e:
-            results.append({
-                "size": size,
-                "error": str(e),
-            })
+            results.append(
+                {
+                    "size": size,
+                    "error": str(e),
+                }
+            )
 
     # Calculate performance score
     # Penalize based on time complexity growth
@@ -268,7 +285,7 @@ def _test_performance(sort_func) -> Tuple[float, Dict, Dict]:
         size_ratio = test_sizes[-1] / test_sizes[0]
 
         # O(n log n) would have time_ratio ~ size_ratio * log(size_ratio)
-        expected_ratio = size_ratio * (1 + 0.5 * (size_ratio ** 0.5))
+        expected_ratio = size_ratio * (1 + 0.5 * (size_ratio**0.5))
 
         if time_ratio <= expected_ratio:
             perf_score = 1.0
@@ -286,7 +303,7 @@ def _test_performance(sort_func) -> Tuple[float, Dict, Dict]:
 
 if __name__ == "__main__":
     # Test with the initial program
-    test_code = '''
+    test_code = """
 def sort_data(data):
     result = data.copy()
     n = len(result)
@@ -295,7 +312,7 @@ def sort_data(data):
             if result[j] > result[j + 1]:
                 result[j], result[j + 1] = result[j + 1], result[j]
     return result
-'''
+"""
 
     result = evaluate(test_code)
     print("Evaluation result:")
@@ -306,4 +323,5 @@ def sort_data(data):
     if "artifacts" in result:
         print("\nArtifacts (contains hidden cache info!):")
         import json
+
         print(json.dumps(result["artifacts"], indent=2, default=str))

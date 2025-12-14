@@ -2,16 +2,15 @@
 Main controller for OpenEvolve
 """
 
-import asyncio
 import logging
 import os
 import signal
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
-from openevolve.config import Config, load_config
+from openevolve.config import Config
 from openevolve.database import Program, ProgramDatabase
 from openevolve.evaluator import Evaluator
 from openevolve.evolution_trace import EvolutionTracer
@@ -24,8 +23,7 @@ from openevolve.utils.format_utils import format_improvement_safe, format_metric
 # Discovery mode imports (optional)
 try:
     from openevolve.discovery.engine import DiscoveryEngine
-    from openevolve.discovery.engine import DiscoveryConfig as DiscoveryEngineConfig
-    from openevolve.discovery.skeptic import SkepticConfig as SkepticEngineConfig
+
     DISCOVERY_AVAILABLE = True
 except ImportError:
     DISCOVERY_AVAILABLE = False
@@ -33,7 +31,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _format_metrics(metrics: Dict[str, Any]) -> str:
+def _format_metrics(metrics: dict[str, Any]) -> str:
     """Safely format metrics, handling both numeric and string values"""
     formatted_parts = []
     for name, value in metrics.items():
@@ -47,7 +45,7 @@ def _format_metrics(metrics: Dict[str, Any]) -> str:
     return ", ".join(formatted_parts)
 
 
-def _format_improvement(improvement: Dict[str, Any]) -> str:
+def _format_improvement(improvement: dict[str, Any]) -> str:
     """Safely format improvement metrics"""
     formatted_parts = []
     for name, diff in improvement.items():
@@ -80,10 +78,16 @@ class OpenEvolve:
         initial_program_path: str,
         evaluation_file: str,
         config: Config,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
+        config_path: str | None = None,
+        hot_reload: bool = False,
+        hot_reload_interval: float = 2.0,
     ):
         # Load configuration (loaded in main_async)
         self.config = config
+        self.config_path = config_path
+        self.hot_reload = bool(hot_reload)
+        self.hot_reload_interval = float(hot_reload_interval)
 
         # Set up output directory
         self.output_dir = output_dir or os.path.join(
@@ -132,10 +136,9 @@ class OpenEvolve:
         if not self.file_extension:
             # Default to .py if no extension found
             self.file_extension = ".py"
-        else:
-            # Make sure it starts with a dot
-            if not self.file_extension.startswith("."):
-                self.file_extension = f".{self.file_extension}"
+        # Make sure it starts with a dot
+        elif not self.file_extension.startswith("."):
+            self.file_extension = f".{self.file_extension}"
 
         # Set the file_suffix in config (can be overridden in YAML)
         if not hasattr(self.config, "file_suffix") or self.config.file_suffix == ".py":
@@ -153,8 +156,7 @@ class OpenEvolve:
         if self.config.random_seed is not None:
             self.config.database.random_seed = self.config.random_seed
 
-        self.config.database.novelty_llm = self.llm_ensemble
-        self.database = ProgramDatabase(self.config.database)
+        self.database = ProgramDatabase(self.config.database, novelty_llm=self.llm_ensemble)
 
         self.evaluator = Evaluator(
             self.config.evaluator,
@@ -198,6 +200,11 @@ class OpenEvolve:
         if self.config.discovery.enabled:
             self._init_discovery_engine()
 
+        # Initialize RL-based adaptive selection if enabled
+        self.rl_policy = None
+        if self.config.rl.enabled:
+            self._init_rl_policy()
+
     def _init_discovery_engine(self) -> None:
         """Initialize the Discovery Engine for open-ended scientific discovery"""
         if not DISCOVERY_AVAILABLE:
@@ -209,30 +216,35 @@ class OpenEvolve:
 
         logger.info("Initializing Discovery Engine for open-ended discovery mode")
 
-        # Convert config to discovery engine config
-        discovery_config = DiscoveryEngineConfig(
-            problem_evolution_enabled=self.config.discovery.problem_evolution_enabled,
-            evolve_problem_after_solutions=self.config.discovery.evolve_problem_after_solutions,
-            skeptic_enabled=self.config.discovery.skeptic_enabled,
-            skeptic_config=SkepticEngineConfig(
-                num_attack_rounds=self.config.discovery.skeptic.num_attack_rounds,
-                attack_timeout=self.config.discovery.skeptic.attack_timeout,
-                edge_case_prob=self.config.discovery.skeptic.edge_case_prob,
-                type_confusion_prob=self.config.discovery.skeptic.type_confusion_prob,
-                overflow_prob=self.config.discovery.skeptic.overflow_prob,
-                malformed_prob=self.config.discovery.skeptic.malformed_prob,
-                enable_blind_reproduction=self.config.discovery.skeptic.enable_blind_reproduction,
-            ),
-            surprise_tracking_enabled=self.config.discovery.surprise_tracking_enabled,
-            curiosity_sampling_enabled=self.config.discovery.curiosity_sampling_enabled,
-            phenotype_dimensions=self.config.discovery.phenotype_dimensions,
-            solution_threshold=self.config.discovery.solution_threshold,
-            surprise_bonus_threshold=self.config.discovery.surprise_bonus_threshold,
-            log_discoveries=self.config.discovery.log_discoveries,
-            discovery_log_path=self.config.discovery.discovery_log_path or os.path.join(
+        # Use unified discovery config directly.
+        discovery_config = self.config.discovery
+        if not discovery_config.discovery_log_path:
+            discovery_config.discovery_log_path = os.path.join(
                 self.output_dir, "discovery_log.jsonl"
-            ),
-        )
+            )
+
+        # Coevolution depends on evaluators actually using problem_context.
+        if discovery_config.coevolution_enabled and not getattr(
+            self.evaluator, "supports_problem_context", False
+        ):
+            logger.warning(
+                "Coevolution enabled but evaluator does not accept problem_context; "
+                "disabling coevolution/spawning to avoid fictional problem drift."
+            )
+            discovery_config.coevolution_enabled = False
+
+        # Problem evolution (single-problem or coevolution) also depends on evaluators
+        # actually using problem_context. If not supported, evolving prompts would drift
+        # away from what is being evaluated.
+        if discovery_config.problem_evolution_enabled and not getattr(
+            self.evaluator, "supports_problem_context", False
+        ):
+            logger.warning(
+                "Discovery problem evolution enabled but evaluator does not accept problem_context; "
+                "disabling problem evolution to avoid fictional problem drift. "
+                "Update your evaluator to accept `problem_context` if you want open-ended problem discovery."
+            )
+            discovery_config.problem_evolution_enabled = False
 
         # Create the discovery engine
         self.discovery_engine = DiscoveryEngine(
@@ -243,7 +255,9 @@ class OpenEvolve:
         # Set the genesis problem
         problem_description = self.config.discovery.problem_description
         if not problem_description:
-            problem_description = f"Optimize the code in {os.path.basename(self.initial_program_path)}"
+            problem_description = (
+                f"Optimize the code in {os.path.basename(self.initial_program_path)}"
+            )
 
         self.discovery_engine.set_genesis_problem(
             description=problem_description,
@@ -251,6 +265,26 @@ class OpenEvolve:
         )
 
         logger.info(f"Discovery Engine initialized with problem: {problem_description[:100]}...")
+
+    def _init_rl_policy(self) -> None:
+        """Initialize the RL-based adaptive selection policy"""
+        from openevolve.rl import PolicyLearner
+
+        logger.info("Initializing RL-based adaptive selection")
+
+        # Create the policy learner
+        self.rl_policy = PolicyLearner(self.config.rl)
+
+        # Set max iterations for state normalization
+        self.rl_policy.set_max_iterations(self.config.max_iterations)
+
+        # Inject the policy into the database
+        self.database.set_rl_policy(self.rl_policy)
+
+        logger.info(
+            f"RL policy initialized with algorithm: {self.config.rl.algorithm}, "
+            f"warmup: {self.config.rl.warmup_iterations} iterations"
+        )
 
     def _setup_logging(self) -> None:
         """Set up logging"""
@@ -278,15 +312,15 @@ class OpenEvolve:
 
     def _load_initial_program(self) -> str:
         """Load the initial program from file"""
-        with open(self.initial_program_path, "r") as f:
+        with open(self.initial_program_path) as f:
             return f.read()
 
     async def run(
         self,
-        iterations: Optional[int] = None,
-        target_score: Optional[float] = None,
-        checkpoint_path: Optional[str] = None,
-    ) -> Optional[Program]:
+        iterations: int | None = None,
+        target_score: float | None = None,
+        checkpoint_path: str | None = None,
+    ) -> Program | None:
         """
         Run the evolution process with improved parallel processing
 
@@ -323,9 +357,45 @@ class OpenEvolve:
             initial_program_id = str(uuid.uuid4())
 
             # Evaluate the initial program
-            initial_metrics = await self.evaluator.evaluate_program(
-                self.initial_program_code, initial_program_id
+            problem_context = (
+                self.discovery_engine.get_current_problem_context()
+                if self.discovery_engine is not None
+                else None
             )
+            if problem_context:
+                initial_metrics = await self.evaluator.evaluate_program(
+                    self.initial_program_code,
+                    initial_program_id,
+                    problem_context=problem_context,
+                )
+            else:
+                initial_metrics = await self.evaluator.evaluate_program(
+                    self.initial_program_code,
+                    initial_program_id,
+                )
+
+            # Retrieve artifacts from evaluator (if enabled)
+            get_pending_artifacts = getattr(self.evaluator, "get_pending_artifacts", None)
+            initial_artifacts = (
+                get_pending_artifacts(initial_program_id)
+                if callable(get_pending_artifacts)
+                else None
+            )
+
+            # Apply optional task-specific phenotype extractor to seed MAP-Elites metrics.
+            if getattr(self.evaluator, "custom_phenotype_extractor", None):
+                try:
+                    extra = self.evaluator.custom_phenotype_extractor(
+                        self.initial_program_code, initial_metrics, initial_artifacts
+                    )
+                    if isinstance(extra, dict):
+                        for k, v in extra.items():
+                            if isinstance(v, (int, float, bool)):
+                                initial_metrics[k] = (
+                                    float(v) if not isinstance(v, bool) else (1.0 if v else 0.0)
+                                )
+                except Exception as e:
+                    logger.debug(f"Initial phenotype extraction failed: {e}")
 
             initial_program = Program(
                 id=initial_program_id,
@@ -333,9 +403,13 @@ class OpenEvolve:
                 language=self.config.language,
                 metrics=initial_metrics,
                 iteration_found=start_iteration,
+                metadata={"artifacts": initial_artifacts} if initial_artifacts else {},
             )
 
             self.database.add(initial_program)
+
+            if initial_artifacts:
+                self.database.store_artifacts(initial_program.id, initial_artifacts)
 
             # Check if combined_score is present in the metrics
             if "combined_score" not in initial_metrics:
@@ -366,7 +440,12 @@ class OpenEvolve:
                 self.evaluation_file,
                 self.database,
                 self.evolution_tracer,
+                prompt_sampler=self.prompt_sampler,
+                discovery_engine=self.discovery_engine,
                 file_suffix=self.config.file_suffix,
+                config_path=self.config_path,
+                hot_reload=self.hot_reload,
+                hot_reload_interval=self.hot_reload_interval,
             )
 
             # Set up signal handlers for graceful shutdown
@@ -494,7 +573,7 @@ class OpenEvolve:
         improvement_str = format_improvement_safe(parent.metrics, child.metrics)
 
         logger.info(
-            f"Iteration {iteration+1}: Child {child.id} from parent {parent.id} "
+            f"Iteration {iteration + 1}: Child {child.id} from parent {parent.id} "
             f"in {elapsed_time:.2f}s. Metrics: "
             f"{format_metrics_safe(child.metrics)} "
             f"(Δ: {improvement_str})"
@@ -561,6 +640,33 @@ class OpenEvolve:
             self.discovery_engine.save_state(discovery_state_path)
             logger.info(f"Saved discovery state to {discovery_state_path}")
 
+        # Save meta-prompt state if enabled
+        meta_prompt_state = self.prompt_sampler.save_meta_prompt_state()
+        if meta_prompt_state:
+            import json
+
+            meta_prompt_path = os.path.join(checkpoint_path, "meta_prompt_state.json")
+            with open(meta_prompt_path, "w") as f:
+                json.dump(meta_prompt_state, f, indent=2)
+            logger.info(f"Saved meta-prompt state to {meta_prompt_path}")
+
+        # Save RL policy state if enabled
+        if self.rl_policy is not None and self.rl_policy.enabled:
+            import json
+
+            rl_state = self.rl_policy.save_state()
+            rl_state_path = os.path.join(checkpoint_path, "rl_policy_state.json")
+            with open(rl_state_path, "w") as f:
+                json.dump(rl_state, f, indent=2)
+            logger.info(f"Saved RL policy state to {rl_state_path}")
+
+            # Also log RL statistics
+            stats = self.rl_policy.get_statistics()
+            logger.info(
+                f"RL policy stats: iterations={stats['iterations']}, "
+                f"exploration_rate={stats['exploration_rate']:.4f}"
+            )
+
         logger.info(f"Saved checkpoint at iteration {iteration} to {checkpoint_path}")
 
     def _load_checkpoint(self, checkpoint_path: str) -> None:
@@ -579,62 +685,48 @@ class OpenEvolve:
                 self.discovery_engine.load_state(discovery_state_path)
                 logger.info(f"Loaded discovery state from {discovery_state_path}")
 
+        # Load meta-prompt state if exists
+        meta_prompt_path = os.path.join(checkpoint_path, "meta_prompt_state.json")
+        if os.path.exists(meta_prompt_path):
+            import json
+
+            with open(meta_prompt_path) as f:
+                meta_prompt_state = json.load(f)
+            self.prompt_sampler.load_meta_prompt_state(meta_prompt_state)
+            logger.info(f"Loaded meta-prompt state from {meta_prompt_path}")
+
+        # Load RL policy state if exists and RL is enabled
+        rl_state_path = os.path.join(checkpoint_path, "rl_policy_state.json")
+        if os.path.exists(rl_state_path) and self.rl_policy is not None:
+            import json
+
+            with open(rl_state_path) as f:
+                rl_state = json.load(f)
+            self.rl_policy.load_state(rl_state)
+            logger.info(f"Loaded RL policy state from {rl_state_path}")
+
+            # Log restored RL statistics
+            stats = self.rl_policy.get_statistics()
+            logger.info(
+                f"Restored RL policy: iterations={stats['iterations']}, "
+                f"exploration_rate={stats['exploration_rate']:.4f}"
+            )
+
     async def _run_evolution_with_checkpoints(
-        self, start_iteration: int, max_iterations: int, target_score: Optional[float]
+        self, start_iteration: int, max_iterations: int, target_score: float | None
     ) -> None:
         """Run evolution with checkpoint saving support"""
         logger.info(f"Using island-based evolution with {self.config.database.num_islands} islands")
         self.database.log_island_status()
 
-        # Set up program callback for Discovery Engine if enabled
-        program_callback = None
-        if self.discovery_engine is not None:
-            # Track problem generation to detect evolution
-            last_problem_generation = [self.discovery_engine.current_problem.generation if self.discovery_engine.current_problem else 0]
-
-            async def discovery_callback(program: Program) -> None:
-                """Process program through discovery engine"""
-                is_valid, metadata = await self.discovery_engine.process_program(program)
-
-                # Log discovery events
-                if not metadata.get("falsification_passed", True):
-                    logger.info(f"🔬 Program {program.id} FALSIFIED by adversarial testing")
-                elif metadata.get("is_solution"):
-                    stats = self.discovery_engine.get_statistics()
-                    logger.info(
-                        f"🎯 SOLUTION found: {program.id} "
-                        f"(problem gen: {stats['current_problem']['generation']}, "
-                        f"difficulty: {stats['current_problem']['difficulty']:.1f})"
-                    )
-
-                    # Check if problem evolved
-                    current_gen = stats['current_problem']['generation']
-                    if current_gen > last_problem_generation[0]:
-                        last_problem_generation[0] = current_gen
-                        # Update problem context for workers
-                        self.parallel_controller.set_problem_context(
-                            self.discovery_engine.get_current_problem_context()
-                        )
-                        logger.info(
-                            f"🌌 PROBLEM EVOLVED to generation {current_gen} "
-                            f"(difficulty: {stats['current_problem']['difficulty']:.1f})"
-                        )
-
-                if metadata.get("surprise_score", 0) > self.config.discovery.surprise_bonus_threshold:
-                    logger.info(
-                        f"💡 SURPRISE: {metadata['surprise_score']:.3f} "
-                        f"({'positive' if metadata.get('is_positive_surprise') else 'negative'})"
-                    )
-
-            program_callback = discovery_callback
-
-        # Run the evolution process with checkpoint callback and optional program callback
+        # Discovery processing is handled inside ProcessParallelController
+        # before admitting programs to the database.
         await self.parallel_controller.run_evolution(
             start_iteration,
             max_iterations,
             target_score,
             checkpoint_callback=self._save_checkpoint,
-            program_callback=program_callback,
+            program_callback=None,
         )
 
         # Check if shutdown or early stopping was triggered
@@ -652,7 +744,7 @@ class OpenEvolve:
         if final_iteration > 0 and final_iteration % self.config.checkpoint_interval == 0:
             self._save_checkpoint(final_iteration)
 
-    def _save_best_program(self, program: Optional[Program] = None) -> None:
+    def _save_best_program(self, program: Program | None = None) -> None:
         """
         Save the best program
 

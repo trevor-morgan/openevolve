@@ -3,16 +3,15 @@ Evaluator for circle packing example (n=26) with improved timeout handling
 Enhanced with artifacts to demonstrate execution feedback
 """
 
-import importlib.util
-import numpy as np
-import time
 import os
-import signal
-import subprocess
-import tempfile
-import traceback
-import sys
 import pickle
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+
+import numpy as np
 
 # Import EvaluationResult for artifacts support
 from openevolve.evaluation_result import EvaluationResult
@@ -113,7 +112,7 @@ try:
     spec = __import__('importlib.util').util.spec_from_file_location("program", '{program_path}')
     program = __import__('importlib.util').util.module_from_spec(spec)
     spec.loader.exec_module(program)
-    
+
     # Run the packing function
     print("Calling run_packing()...")
     centers, radii, sum_radii = program.run_packing()
@@ -129,7 +128,7 @@ try:
     with open('{temp_file.name}.results', 'wb') as f:
         pickle.dump(results, f)
     print(f"Results saved to {temp_file.name}.results")
-    
+
 except Exception as e:
     # If an error occurs, save the error instead
     print(f"Error in subprocess: {{str(e)}}")
@@ -209,7 +208,8 @@ def evaluate(program_path):
 
         # Use subprocess to run with timeout
         centers, radii, reported_sum = run_with_timeout(
-            program_path, timeout_seconds=600  # Single timeout
+            program_path,
+            timeout_seconds=600,  # Single timeout
         )
 
         end_time = time.time()
@@ -311,7 +311,7 @@ def evaluate(program_path):
         )
 
     except TimeoutError as e:
-        error_msg = f"Evaluation timed out: {str(e)}"
+        error_msg = f"Evaluation timed out: {e!s}"
         print(error_msg)
         return EvaluationResult(
             metrics={
@@ -329,7 +329,7 @@ def evaluate(program_path):
             },
         )
     except Exception as e:
-        error_msg = f"Evaluation failed completely: {str(e)}"
+        error_msg = f"Evaluation failed completely: {e!s}"
         print(error_msg)
         traceback.print_exc()
         return EvaluationResult(

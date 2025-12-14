@@ -10,7 +10,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from openevolve.utils.trace_export_utils import (
     append_trace_jsonl,
@@ -29,33 +29,33 @@ class EvolutionTrace:
     timestamp: float
     parent_id: str
     child_id: str
-    parent_metrics: Dict[str, Any]
-    child_metrics: Dict[str, Any]
-    parent_code: Optional[str] = None
-    child_code: Optional[str] = None
-    code_diff: Optional[str] = None
-    prompt: Optional[Dict[str, str]] = None
-    llm_response: Optional[str] = None
-    improvement_delta: Optional[Dict[str, float]] = None
-    island_id: Optional[int] = None
-    generation: Optional[int] = None
-    artifacts: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    parent_metrics: dict[str, Any]
+    child_metrics: dict[str, Any]
+    parent_code: str | None = None
+    child_code: str | None = None
+    code_diff: str | None = None
+    prompt: dict[str, str] | None = None
+    llm_response: str | None = None
+    improvement_delta: dict[str, float] | None = None
+    island_id: int | None = None
+    generation: int | None = None
+    artifacts: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
 
     # Discovery mode fields
-    problem_id: Optional[str] = None  # Current problem being solved
-    problem_generation: Optional[int] = None  # Problem evolution generation
-    problem_difficulty: Optional[float] = None  # Current problem difficulty
-    falsification_passed: Optional[bool] = None  # Did it pass adversarial testing?
-    surprise_score: Optional[float] = None  # How surprising was this result?
-    is_solution: Optional[bool] = None  # Did this solve the current problem?
-    phenotype: Optional[Dict[str, Any]] = None  # Behavioral characteristics
+    problem_id: str | None = None  # Current problem being solved
+    problem_generation: int | None = None  # Problem evolution generation
+    problem_difficulty: float | None = None  # Current problem difficulty
+    falsification_passed: bool | None = None  # Did it pass adversarial testing?
+    surprise_score: float | None = None  # How surprising was this result?
+    is_solution: bool | None = None  # Did this solve the current problem?
+    phenotype: dict[str, Any] | None = None  # Behavioral characteristics
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert trace to dictionary format"""
         return {k: v for k, v in asdict(self).items() if v is not None}
 
-    def calculate_improvement(self) -> Dict[str, float]:
+    def calculate_improvement(self) -> dict[str, float]:
         """Calculate improvement deltas between parent and child metrics"""
         improvement = {}
         for key in self.child_metrics:
@@ -72,7 +72,7 @@ class EvolutionTracer:
 
     def __init__(
         self,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
         format: str = "jsonl",
         include_code: bool = False,
         include_prompts: bool = True,
@@ -126,7 +126,7 @@ class EvolutionTracer:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Initialize buffer for batched writing
-        self.buffer: List[EvolutionTrace] = []
+        self.buffer: list[EvolutionTrace] = []
 
         # For JSON format, keep all traces in memory
         if format == "json":
@@ -139,13 +139,13 @@ class EvolutionTracer:
         iteration: int,
         parent_program: Any,
         child_program: Any,
-        prompt: Optional[Dict[str, str]] = None,
-        llm_response: Optional[str] = None,
-        artifacts: Optional[Dict[str, Any]] = None,
-        island_id: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        prompt: dict[str, str] | None = None,
+        llm_response: str | None = None,
+        artifacts: dict[str, Any] | None = None,
+        island_id: int | None = None,
+        metadata: dict[str, Any] | None = None,
         # Discovery mode fields
-        discovery_metadata: Optional[Dict[str, Any]] = None,
+        discovery_metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log an evolution trace entry
@@ -239,10 +239,12 @@ class EvolutionTracer:
 
                 self.stats["total_improvement"][metric] += delta
 
-                if delta > self.stats["best_improvement"][metric]:
-                    self.stats["best_improvement"][metric] = delta
-                if delta < self.stats["worst_decline"][metric]:
-                    self.stats["worst_decline"][metric] = delta
+                self.stats["best_improvement"][metric] = max(
+                    self.stats["best_improvement"][metric], delta
+                )
+                self.stats["worst_decline"][metric] = min(
+                    self.stats["worst_decline"][metric], delta
+                )
 
     def flush(self):
         """Write buffered traces to file"""
@@ -269,7 +271,7 @@ class EvolutionTracer:
         except Exception as e:
             logger.error(f"Error flushing traces to file: {e}")
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get current tracing statistics"""
         return {
             **self.stats,
@@ -328,12 +330,12 @@ class EvolutionTracer:
 
 
 def extract_evolution_trace_from_checkpoint(
-    checkpoint_dir: Union[str, Path],
-    output_path: Optional[str] = None,
+    checkpoint_dir: str | Path,
+    output_path: str | None = None,
     format: str = "jsonl",
     include_code: bool = True,
     include_prompts: bool = True,
-) -> List[EvolutionTrace]:
+) -> list[EvolutionTrace]:
     """
     Extract evolution traces from an existing checkpoint directory
 
@@ -363,7 +365,7 @@ def extract_evolution_trace_from_checkpoint(
 
     for prog_file in program_files:
         try:
-            with open(prog_file, "r") as f:
+            with open(prog_file) as f:
                 prog_data = json.load(f)
                 programs[prog_data["id"]] = prog_data
         except (json.JSONDecodeError, KeyError) as e:
@@ -432,8 +434,8 @@ def extract_evolution_trace_from_checkpoint(
 
 
 def extract_full_lineage_traces(
-    checkpoint_dir: Union[str, Path], output_path: Optional[str] = None, format: str = "json"
-) -> List[Dict[str, Any]]:
+    checkpoint_dir: str | Path, output_path: str | None = None, format: str = "json"
+) -> list[dict[str, Any]]:
     """
     Extract complete evolution traces with full lineage chains and prompts/actions
 
@@ -464,7 +466,7 @@ def extract_full_lineage_traces(
 
     for prog_file in program_files:
         try:
-            with open(prog_file, "r") as f:
+            with open(prog_file) as f:
                 prog_data = json.load(f)
                 programs[prog_data["id"]] = prog_data
         except (json.JSONDecodeError, KeyError) as e:

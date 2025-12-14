@@ -5,9 +5,8 @@ Real-Time Adaptive Signal Processing Algorithm for Non-Stationary Time Series
 This algorithm implements a sliding window approach to filter volatile, non-stationary
 time series data while minimizing noise and preserving signal dynamics.
 """
+
 import numpy as np
-from scipy import signal
-from collections import deque
 
 
 def adaptive_filter(x, window_size=20):
@@ -183,7 +182,7 @@ def run_signal_processing(signal_length=1000, noise_level=0.3, window_size=20):
 if __name__ == "__main__":
     # Test the algorithm
     results = run_signal_processing()
-    print(f"Signal processing completed!")
+    print("Signal processing completed!")
     print(f"Correlation with clean signal: {results['correlation']:.3f}")
     print(f"Noise reduction: {results['noise_reduction']:.3f}")
     print(f"Processed signal length: {results['signal_length']}")

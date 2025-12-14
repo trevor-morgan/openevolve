@@ -1,0 +1,19 @@
+# Stock Prediction ML Example Requirements
+
+# Alpaca API for market data
+alpaca-py>=0.21.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Data processing (also needed on DGX)
+numpy>=1.24.0
+pandas>=2.0.0
+
+# PyTorch (install appropriate version for your CUDA)
+# On DGX with CUDA 13.0:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.0.0
+
+# Optional: for local testing without GPU
+# torch>=2.0.0+cpu

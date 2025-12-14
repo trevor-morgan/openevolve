@@ -1,0 +1,74 @@
+# OpenEvolve Configuration for CUDA GEMM Optimization
+# Target: NVIDIA GB10 (DGX Spark) - Blackwell architecture
+
+# General settings
+max_iterations: 100
+checkpoint_interval: 10
+log_level: "INFO"
+
+# Evolution settings
+diff_based_evolution: false  # Full rewrites for CUDA kernels (structural changes needed)
+
+# LLM Configuration
+llm:
+  # Models for evolution
+  models:
+    - name: "claude-opus-4-5-20251101"
+      weight: 0.7
+    - name: "gpt-5.1-codex-max-xhigh"
+      weight: 0.3
+
+  # API configuration (CLIProxyAPI)
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  # Generation parameters
+  temperature: 0.8
+  max_tokens: 8192
+  timeout: 300  # 5 minutes for LLM calls (CLIProxyAPI can be slow)
+  retries: 3
+  retry_delay: 10
+
+# Prompt configuration
+prompt:
+  system_message: |
+    You are an expert CUDA programmer optimizing GEMM (matrix multiplication) kernels
+    for maximum performance on NVIDIA GB10 (Blackwell architecture, compute capability 12.1).
+
+    Key optimization techniques to consider:
+    1. **Tiling**: Use shared memory to reduce global memory accesses
+    2. **Register blocking**: Compute multiple output elements per thread
+    3. **Vectorized loads**: Use float4/int4 for coalesced memory access
+    4. **Tensor cores**: Use WMMA/MMA instructions for FP16/TF32 operations
+    5. **Memory coalescing**: Ensure threads access contiguous memory
+    6. **Bank conflict avoidance**: Pad shared memory to avoid conflicts
+    7. **Loop unrolling**: Use #pragma unroll for inner loops
+    8. **Occupancy optimization**: Balance shared memory vs thread count
+
+    The target is to achieve as close to the theoretical peak of 52 TFLOP/s (FP32) as possible.
+    Current state-of-the-art libraries achieve 80-95% efficiency on large matrices.
+
+    Always maintain correctness - the kernel must produce mathematically correct results.
+    Code must compile with nvcc for sm_121 architecture.
+
+  num_top_programs: 3
+  num_diverse_programs: 2
+
+# Database / MAP-Elites settings
+database:
+  population_size: 500
+  num_islands: 4
+  migration_interval: 10
+  migration_rate: 0.1
+
+  # Feature dimensions for diversity
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+  feature_bins: 10
+
+# Evaluator configuration
+evaluator:
+  timeout: 600  # 10 minutes for CUDA compilation + benchmarking
+  parallel_evaluations: 1  # Single GPU
+  cascade_evaluation: false  # Using single-stage evaluation

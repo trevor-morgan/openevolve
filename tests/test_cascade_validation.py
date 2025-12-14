@@ -2,13 +2,14 @@
 Tests for cascade evaluation validation functionality in openevolve.evaluator
 """
 
-import unittest
-import tempfile
 import os
-from unittest.mock import patch, MagicMock
+import tempfile
+import unittest
+from unittest.mock import patch
+
 from openevolve.config import Config
-from openevolve.evaluator import Evaluator
 from openevolve.evaluation_result import EvaluationResult
+from openevolve.evaluator import Evaluator
 
 
 class TestCascadeValidation(unittest.IsolatedAsyncioTestCase):
@@ -212,10 +213,10 @@ def evaluate(program_path):
 class Evaluator:
     def evaluate_stage1(self, program_path):
         return {"stage1_score": 0.5}
-    
+
     def evaluate_stage2(self, program_path):
         return {"stage2_score": 0.7}
-    
+
     def evaluate(self, program_path):
         return {"score": 0.5}
 

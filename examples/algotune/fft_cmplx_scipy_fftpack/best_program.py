@@ -2,10 +2,10 @@
 """
 FFT Complex
 
-This task requires computing the N-dimensional Fast Fourier Transform (FFT) of a complex-valued matrix.  
-The FFT is a mathematical technique that converts data from the spatial (or time) domain into the frequency domain, revealing both the magnitude and phase of the frequency components.  
-The input is a square matrix of size n×n, where each element is a complex number containing both real and imaginary parts.  
-The output is a square matrix of the same size, where each entry is a complex number representing a specific frequency component of the input data, including its amplitude and phase.  
+This task requires computing the N-dimensional Fast Fourier Transform (FFT) of a complex-valued matrix.
+The FFT is a mathematical technique that converts data from the spatial (or time) domain into the frequency domain, revealing both the magnitude and phase of the frequency components.
+The input is a square matrix of size n×n, where each element is a complex number containing both real and imaginary parts.
+The output is a square matrix of the same size, where each entry is a complex number representing a specific frequency component of the input data, including its amplitude and phase.
 This transformation is crucial in analyzing signals and data with inherent complex properties.
 
 Input:
@@ -41,29 +41,30 @@ Consider these algorithmic improvements for substantial performance gains:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import numpy as np
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 _jit_fftn = jax.jit(jnp.fft.fftn)
-from numpy.typing import NDArray
-from typing import Any, Dict, List, Optional
+
 
 class FFTComplexScipyFFTpack:
     """
     Initial implementation of fft_cmplx_scipy_fftpack task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     @staticmethod
     def solve(problem):
         """
         Solve the fft_cmplx_scipy_fftpack problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to fft_cmplx_scipy_fftpack
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -72,20 +73,20 @@ class FFTComplexScipyFFTpack:
             Compute the N-dimensional FFT using a JIT-compiled JAX function.
             """
             return _jit_fftn(problem)
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     @staticmethod
     def is_solution(problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -107,23 +108,25 @@ class FFTComplexScipyFFTpack:
                 logging.error(f"FFT solution error {error} exceeds tolerance {tol}.")
                 return False
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     return FFTComplexScipyFFTpack.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

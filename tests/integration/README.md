@@ -54,7 +54,7 @@ All integration tests use:
 ## CI Behavior
 
 GitHub Actions will:
-- Run **fast tests only** (`-m "not slow"`) 
+- Run **fast tests only** (`-m "not slow"`)
 - Complete in <30 seconds
 - Validate core functionality without requiring model downloads
 - Skip all tests marked with `@pytest.mark.slow`

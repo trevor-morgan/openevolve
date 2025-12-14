@@ -7,34 +7,33 @@ Tests the three core components:
 3. EpistemicArchive - Behavioral diversity tracking
 """
 
-import ast
 import asyncio
-import pytest
 import time
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-# Import discovery modules
-from openevolve.discovery.problem_space import (
-    ProblemSpace,
-    ProblemEvolver,
-    ProblemEvolverConfig,
-)
-from openevolve.discovery.skeptic import (
-    AdversarialSkeptic,
-    SkepticConfig,
-    FalsificationResult,
+from openevolve.discovery.engine import (
+    DiscoveryConfig,
+    DiscoveryEngine,
+    DiscoveryEvent,
 )
 from openevolve.discovery.epistemic_archive import (
+    EpistemicArchive,
     Phenotype,
     PhenotypeExtractor,
     SurpriseMetric,
-    EpistemicArchive,
 )
-from openevolve.discovery.engine import (
-    DiscoveryEngine,
-    DiscoveryConfig,
-    DiscoveryEvent,
+
+# Import discovery modules
+from openevolve.discovery.problem_space import (
+    ProblemEvolver,
+    ProblemEvolverConfig,
+    ProblemSpace,
+)
+from openevolve.discovery.skeptic import (
+    AdversarialSkeptic,
+    FalsificationResult,
+    SkepticConfig,
 )
 
 
@@ -480,6 +479,91 @@ class TestDiscoveryEngine(unittest.TestCase):
         self.assertEqual(stats["current_problem"]["generation"], 0)
 
 
+class TestMinimalCriterionScreening(unittest.TestCase):
+    """Tests for minimal-criterion transfer screening in coevolution."""
+
+    def _run(self, coro):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    def _make_engine(self, eval_returns, **cfg_kwargs):
+        mock_openevolve = MagicMock()
+        mock_openevolve.llm_ensemble = None
+
+        mock_db = MagicMock()
+        mock_db.config.feature_dimensions = []
+
+        # Two dummy programs in the archive
+        p1 = MagicMock()
+        p1.id = "prog1"
+        p1.code = "def solve(x): return x"
+        p2 = MagicMock()
+        p2.id = "prog2"
+        p2.code = "def solve(x): return x"
+        mock_db.get_top_programs.return_value = [p1, p2]
+        mock_openevolve.database = mock_db
+
+        mock_eval = MagicMock()
+
+        async def _eval(*a, **k):
+            return eval_returns.pop(0)
+
+        mock_eval.evaluate_program = _eval
+        mock_openevolve.evaluator = mock_eval
+
+        config = DiscoveryConfig(
+            coevolution_enabled=True,
+            problem_evolution_enabled=True,
+            **cfg_kwargs,
+        )
+        engine = DiscoveryEngine(config, mock_openevolve)
+        engine.set_genesis_problem("Genesis")
+        return engine
+
+    def test_candidate_too_easy_rejected(self):
+        engine = self._make_engine(
+            eval_returns=[
+                {"combined_score_raw": 0.85},
+                {"combined_score_raw": 0.2},
+            ],
+            solution_threshold=0.8,
+            min_transfer_fitness=0.3,
+        )
+        cand = ProblemSpace(id="cand", description="Harder", parent_id="genesis")
+        passed = self._run(engine._passes_minimal_criterion(cand))
+        self.assertFalse(passed)
+
+    def test_candidate_too_hard_rejected(self):
+        engine = self._make_engine(
+            eval_returns=[
+                {"combined_score_raw": 0.1},
+                {"combined_score_raw": 0.2},
+            ],
+            solution_threshold=0.8,
+            min_transfer_fitness=0.3,
+        )
+        cand = ProblemSpace(id="cand", description="Harder", parent_id="genesis")
+        passed = self._run(engine._passes_minimal_criterion(cand))
+        self.assertFalse(passed)
+
+    def test_candidate_in_range_admitted(self):
+        engine = self._make_engine(
+            eval_returns=[
+                {"combined_score_raw": 0.5},
+                {"combined_score_raw": 0.4},
+            ],
+            solution_threshold=0.8,
+            min_transfer_fitness=0.3,
+        )
+        cand = ProblemSpace(id="cand", description="Harder", parent_id="genesis")
+        passed = self._run(engine._passes_minimal_criterion(cand))
+        self.assertTrue(passed)
+
+
 class TestDiscoveryEvent(unittest.TestCase):
     """Tests for DiscoveryEvent"""
 
@@ -533,9 +617,7 @@ class TestIntegration(unittest.TestCase):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                is_valid, metadata = loop.run_until_complete(
-                    engine.process_program(mock_program)
-                )
+                is_valid, metadata = loop.run_until_complete(engine.process_program(mock_program))
             finally:
                 loop.close()
 

@@ -45,7 +45,7 @@ def evaluate(program_path: str) -> Dict:
     try:
         # Import and run your program
         # Calculate metrics
-        
+
         return {
             'combined_score': 0.8,  # PRIMARY METRIC for evolution (required)
             'accuracy': 0.9,        # Your custom metrics
@@ -115,7 +115,7 @@ prompt:
   system_message: |
     You are an expert programmer. Your goal is to improve the code
     in the EVOLVE-BLOCK to achieve better performance on the task.
-    
+
     Focus on algorithmic improvements and code optimization.
   num_top_programs: 3
   num_diverse_programs: 2
@@ -154,7 +154,7 @@ def evaluate(program_path: str) -> Dict:
     prompt_length = len(generated_prompt)  # Actual character count
     execution_time = measure_runtime()     # Time in seconds
     memory_usage = get_peak_memory()       # Bytes used
-    
+
     return {
         "combined_score": accuracy_score,
         "prompt_length": prompt_length,    # Raw count, not bin index
@@ -167,14 +167,14 @@ def evaluate(program_path: str) -> Dict:
 ```python
 def evaluate(program_path: str) -> Dict:
     prompt_length = len(generated_prompt)
-    
+
     # DON'T DO THIS - pre-computing bins
     if prompt_length < 100:
         length_bin = 0
     elif prompt_length < 500:
         length_bin = 1
     # ... more binning logic
-    
+
     return {
         "combined_score": accuracy_score,
         "prompt_length": length_bin,  # ❌ This is a bin index, not raw value

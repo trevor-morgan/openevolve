@@ -13,10 +13,10 @@ llm:
   secondary_model: "gemini-flash-latest"
   secondary_model_weight: 0.2
   api_base: "https://generativelanguage.googleapis.com/v1beta/openai/"
-  
+
   temperature: 0.7
   max_tokens: 16384
-  
+
   # Custom system message for Rust performance programming
   system_message: |
     You are an expert Rust systems programmer specializing in high-performance algorithms.
@@ -28,7 +28,7 @@ llm:
 prompt:
   num_top_programs: 4
   num_diverse_programs: 3
-  
+
   # Include compilation errors and performance artifacts
   include_artifacts: true
   max_artifact_bytes: 8192
@@ -37,7 +37,7 @@ prompt:
 database:
   population_size: 150
   num_islands: 4
-  
+
   # Feature dimensions for sorting algorithms
   feature_dimensions:
     - "score"            # Overall performance score
@@ -49,6 +49,6 @@ database:
 evaluator:
   timeout: 60  # Rust compilation can take time
   parallel_evaluations: 3
-  
+
   # Direct evaluation - evaluator doesn't implement cascade functions
   cascade_evaluation: false

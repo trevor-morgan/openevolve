@@ -15,7 +15,6 @@ Probe Types:
 - Numerical Probe: Detects numerical stability issues
 """
 
-import asyncio
 import json
 import logging
 import re
@@ -24,15 +23,16 @@ import sys
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from openevolve.llm.ensemble import LLMEnsemble
-    from openevolve.discovery.ontology import Ontology, Variable
     from openevolve.discovery.crisis_detector import EpistemicCrisis
+    from openevolve.discovery.ontology import Ontology, Variable
+    from openevolve.llm.ensemble import LLMEnsemble
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +63,16 @@ class Probe:
     target_hypothesis: str
     probe_type: str  # "state", "gradient", "coverage", "numerical"
     rationale: str = ""
-    expected_schema: Dict[str, Any] = field(default_factory=dict)
+    expected_schema: dict[str, Any] = field(default_factory=dict)
     timeout: float = 60.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Probe":
+    def from_dict(cls, data: dict[str, Any]) -> "Probe":
         """Deserialize from dictionary"""
         return cls(**data)
 
@@ -96,13 +96,13 @@ class ProbeResult:
 
     probe_id: str
     success: bool
-    discovered_variables: List["Variable"] = field(default_factory=list)
+    discovered_variables: list["Variable"] = field(default_factory=list)
     raw_output: Any = None
-    validation_stats: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    validation_stats: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
     execution_time: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return {
             "probe_id": self.probe_id,
@@ -267,9 +267,11 @@ class InstrumentSynthesizer:
         self.llm_ensemble = llm_ensemble
 
         # History tracking
-        self.probe_history: List[Probe] = []
-        self.result_history: List[ProbeResult] = []
-        self.successful_patterns: Dict[str, List[str]] = {}  # probe_type -> successful code patterns
+        self.probe_history: list[Probe] = []
+        self.result_history: list[ProbeResult] = []
+        self.successful_patterns: dict[
+            str, list[str]
+        ] = {}  # probe_type -> successful code patterns
 
         logger.info("Initialized InstrumentSynthesizer")
 
@@ -277,8 +279,8 @@ class InstrumentSynthesizer:
         self,
         crisis: "EpistemicCrisis",
         current_ontology: "Ontology",
-        evaluation_artifacts: Dict[str, Any],
-    ) -> List[Probe]:
+        evaluation_artifacts: dict[str, Any],
+    ) -> list[Probe]:
         """
         Generate probe code based on crisis type and available data.
 
@@ -293,7 +295,7 @@ class InstrumentSynthesizer:
         probes = []
 
         # Generate probes for each suggested probe type
-        for probe_type in crisis.suggested_probes[:self.config.max_probes_per_crisis]:
+        for probe_type in crisis.suggested_probes[: self.config.max_probes_per_crisis]:
             if self.llm_ensemble:
                 probe = await self._synthesize_probe_with_llm(
                     crisis, current_ontology, evaluation_artifacts, probe_type
@@ -316,9 +318,9 @@ class InstrumentSynthesizer:
         self,
         crisis: "EpistemicCrisis",
         current_ontology: "Ontology",
-        evaluation_artifacts: Dict[str, Any],
+        evaluation_artifacts: dict[str, Any],
         probe_type: str,
-    ) -> Optional[Probe]:
+    ) -> Probe | None:
         """Generate a probe using LLM"""
         from openevolve.prompt.templates import (
             PROBE_SYNTHESIS_SYSTEM,
@@ -327,7 +329,9 @@ class InstrumentSynthesizer:
 
         # Format the prompt
         crisis_context = crisis.to_prompt_context()
-        ontology_context = current_ontology.to_prompt_context() if current_ontology else "No ontology defined"
+        ontology_context = (
+            current_ontology.to_prompt_context() if current_ontology else "No ontology defined"
+        )
 
         # Describe available artifacts
         artifact_schema = self._describe_artifacts(evaluation_artifacts)
@@ -393,7 +397,7 @@ class InstrumentSynthesizer:
             metadata={"generated_by": "fallback"},
         )
 
-    def _describe_artifacts(self, artifacts: Dict[str, Any]) -> str:
+    def _describe_artifacts(self, artifacts: dict[str, Any]) -> str:
         """Generate a description of available artifacts"""
         if not artifacts:
             return "No artifacts available"
@@ -410,15 +414,15 @@ class InstrumentSynthesizer:
 
         return "\n".join(lines)
 
-    def _extract_code_from_response(self, response: str) -> Optional[str]:
+    def _extract_code_from_response(self, response: str) -> str | None:
         """Extract Python code from LLM response"""
         # Try to find code blocks
-        code_match = re.search(r'```python\s*(.*?)```', response, re.DOTALL)
+        code_match = re.search(r"```python\s*(.*?)```", response, re.DOTALL)
         if code_match:
             return code_match.group(1).strip()
 
         # Try to find a function definition
-        func_match = re.search(r'(def probe\s*\(.*?\).*?)(?=\ndef|\Z)', response, re.DOTALL)
+        func_match = re.search(r"(def probe\s*\(.*?\).*?)(?=\ndef|\Z)", response, re.DOTALL)
         if func_match:
             return func_match.group(1).strip()
 
@@ -427,7 +431,9 @@ class InstrumentSynthesizer:
     def _extract_hypothesis(self, response: str) -> str:
         """Extract the target hypothesis from LLM response"""
         # Look for hypothesis markers
-        hypo_match = re.search(r'(?:hypothesis|looking for|target)[:\s]*([^\n]+)', response, re.IGNORECASE)
+        hypo_match = re.search(
+            r"(?:hypothesis|looking for|target)[:\s]*([^\n]+)", response, re.IGNORECASE
+        )
         if hypo_match:
             return hypo_match.group(1).strip()
         return "Discover hidden variables"
@@ -435,15 +441,27 @@ class InstrumentSynthesizer:
     def _extract_rationale(self, response: str) -> str:
         """Extract the rationale from LLM response"""
         # Look for rationale markers
-        rat_match = re.search(r'(?:rationale|because|reason)[:\s]*([^\n]+)', response, re.IGNORECASE)
+        rat_match = re.search(
+            r"(?:rationale|because|reason)[:\s]*([^\n]+)", response, re.IGNORECASE
+        )
         if rat_match:
             return rat_match.group(1).strip()
         return ""
 
+    def _safe_json_literal(self, obj: Any, max_chars: int = 50_000) -> str:
+        """Serialize obj to a JSON literal safe for embedding in probe code."""
+        try:
+            dumped = json.dumps(obj, default=str)
+        except Exception:
+            dumped = json.dumps(str(obj))
+        if len(dumped) > max_chars:
+            dumped = json.dumps({"_truncated": dumped[:max_chars], "_note": "truncated for probe"})
+        return dumped
+
     async def execute_probe(
         self,
         probe: Probe,
-        evaluation_context: Dict[str, Any],
+        evaluation_context: dict[str, Any],
     ) -> ProbeResult:
         """
         Execute a probe and parse results.
@@ -461,7 +479,10 @@ class InstrumentSynthesizer:
         metrics = evaluation_context.get("metrics", {})
 
         # Build the execution code
-        exec_code = f'''
+        artifacts_json = self._safe_json_literal(artifacts)
+        metrics_json = self._safe_json_literal(metrics)
+
+        exec_code = f"""
 import json
 import sys
 
@@ -470,24 +491,25 @@ import sys
 # Execute the probe
 try:
     result = probe(
-        artifacts={json.dumps(artifacts)},
-        metrics={json.dumps(metrics)}
+        artifacts={artifacts_json},
+        metrics={metrics_json}
     )
     print(json.dumps(result))
 except Exception as e:
     print(json.dumps({{"error": str(e)}}))
     sys.exit(1)
-'''
+"""
 
         try:
             # Execute in subprocess with timeout
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(exec_code)
                 temp_path = f.name
 
             try:
                 result = subprocess.run(
                     [sys.executable, temp_path],
+                    check=False,
                     capture_output=True,
                     text=True,
                     timeout=probe.timeout,
@@ -556,6 +578,7 @@ except Exception as e:
 
             finally:
                 import os
+
                 os.unlink(temp_path)
 
         except subprocess.TimeoutExpired:
@@ -570,16 +593,16 @@ except Exception as e:
             return ProbeResult(
                 probe_id=probe.id,
                 success=False,
-                error=f"Probe execution error: {str(e)}",
+                error=f"Probe execution error: {e!s}",
                 execution_time=time.time() - start_time,
             )
 
     async def validate_discovery(
         self,
         variable: "Variable",
-        evaluation_context: Dict[str, Any],
-        run_evaluation: Optional[Callable] = None,
-    ) -> Tuple[bool, float]:
+        evaluation_context: dict[str, Any],
+        run_evaluation: Callable | None = None,
+    ) -> tuple[bool, float]:
         """
         Validate a discovered variable using statistical correlation.
 
@@ -627,14 +650,12 @@ except Exception as e:
 
         if len(fitness_samples) < 3:
             logger.warning(
-                f"Not enough samples for validation ({len(fitness_samples)}), "
-                "using heuristic"
+                f"Not enough samples for validation ({len(fitness_samples)}), using heuristic"
             )
             return self._validate_heuristic(variable)
 
         # Calculate statistics
         fitness_var = np.var(fitness_samples)
-        fitness_mean = np.mean(fitness_samples)
 
         # Check if variable explains fitness variance
         # This is a simplified validation - in practice you'd want
@@ -660,7 +681,7 @@ except Exception as e:
 
         return is_valid, confidence
 
-    def _validate_heuristic(self, variable: "Variable") -> Tuple[bool, float]:
+    def _validate_heuristic(self, variable: "Variable") -> tuple[bool, float]:
         """Heuristic validation when statistical validation isn't possible"""
         # Use the confidence from the probe
         confidence = variable.confidence
@@ -680,7 +701,7 @@ except Exception as e:
 
         return is_valid, confidence
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get statistics about probe synthesis and execution"""
         successful_probes = [r for r in self.result_history if r.success]
         total_discoveries = sum(len(r.discovered_variables) for r in self.result_history)
@@ -691,10 +712,12 @@ except Exception as e:
             "success_rate": len(successful_probes) / max(len(self.result_history), 1),
             "total_discoveries": total_discoveries,
             "probes_by_type": self._count_probes_by_type(),
-            "avg_execution_time": np.mean([r.execution_time for r in self.result_history]) if self.result_history else 0,
+            "avg_execution_time": np.mean([r.execution_time for r in self.result_history])
+            if self.result_history
+            else 0,
         }
 
-    def _count_probes_by_type(self) -> Dict[str, int]:
+    def _count_probes_by_type(self) -> dict[str, int]:
         """Count probes by type"""
         counts = {}
         for probe in self.probe_history:

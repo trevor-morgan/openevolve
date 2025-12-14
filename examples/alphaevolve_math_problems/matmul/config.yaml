@@ -37,12 +37,12 @@ prompt:
     PROBLEM CONTEXT:
     Target: Find the minimal rank R for the tensor decomposition T_ijk = ∑_r=1^R U_ir V_jr W_kr.
     The goal is to beat the best algorithm and discover a state-of-the-art algorithm with the lowest rank possible.
-    Constraint: The reconstructed tensor from the learned factors (U, V, W) must be EXACTLY EQUAL to the ground-truth matrix multiplication tensor T_ijk after its composition to a tensor form. 
+    Constraint: The reconstructed tensor from the learned factors (U, V, W) must be EXACTLY EQUAL to the ground-truth matrix multiplication tensor T_ijk after its composition to a tensor form.
     This can be enforced in two ways:
     * by minimizing the loss function to near-zero, and do a "rounding algorithm" to make the continuous aproximate solution converge to a exactly one where its elements are interger multiples of a constant.
     * by making an algorithm that search in the space of the set of possible elements, or a grid of elements that can compose the final decomposition.
     You can be creative and choose the best possible algorithm to solve this problem, for example incorporating contraints that force the solution to be in the right space, or by enforcing this from the start.
-  
+
     MATHEMATICAL FORMULATION:
     Given: The standard matrix multiplication tensor T for n, m, p fixed.
     Objective: Find the smallest integer R such that there exist real or complex valued matrices U, V, W of shapes (n*p, R), (n*m, R), and (m*p, R) that compose T_ijk.
@@ -72,7 +72,7 @@ prompt:
     Steps vs. Learning Rate Trade-off: A lower learning rate might require more num_steps to converge, and vice-versa. Explore this relationship to find the most efficient path to a solution.
     From Discovery to Algorithm: The end goal is not just the factors U, V, W, but the algorithm they represent. A good solution should be interpretable as a series of R multiplications and additions/subtractions.
     The robustness and efficiency of the proposed code and hyperparameter configuration (i.e., it should converge reliably and quickly).
-    
+
   num_top_programs: 3
   num_diverse_programs: 2
 

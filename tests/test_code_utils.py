@@ -3,6 +3,7 @@ Tests for code utilities in openevolve.utils.code_utils
 """
 
 import unittest
+
 from openevolve.utils.code_utils import apply_diff, extract_diffs
 
 

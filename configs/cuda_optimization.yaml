@@ -1,0 +1,252 @@
+# OpenEvolve CUDA Kernel Optimization Configuration
+# =================================================
+# This configuration combines RL-based adaptive selection with CUDA-specific
+# meta-prompting strategies for GPU kernel optimization.
+#
+# Key features:
+# - RL learns when to explore vs exploit based on evolution progress
+# - Meta-prompting learns which CUDA strategies work best
+# - Empirically-derived strategies from GB10 analysis (67% success rate for top strategies)
+#
+# Usage:
+#   python openevolve-run.py kernel.cu evaluator.py --config configs/cuda_optimization.yaml
+#
+# For attention kernels:
+#   python openevolve-run.py attention.cu evaluator.py --config configs/cuda_optimization.yaml
+
+# General settings
+max_iterations: 500                  # CUDA optimization often needs more iterations
+checkpoint_interval: 25              # More frequent checkpoints for long runs
+log_level: "INFO"
+random_seed: null                    # Random for diverse exploration
+
+# Evolution settings
+diff_based_evolution: true           # Diff-based works well for incremental CUDA optimization
+max_code_length: 30000               # CUDA kernels can be verbose with all the optimizations
+
+# Early stopping - disabled for discovery-oriented runs
+early_stopping_patience: null
+convergence_threshold: 0.0001
+early_stopping_metric: "combined_score"
+
+# LLM configuration optimized for code generation
+llm:
+  # Primary models - flash for speed, larger model for complex mutations
+  models:
+    - name: "gemini-2.0-flash-lite"
+      weight: 0.6                    # Most mutations - fast iteration
+    - name: "gemini-2.0-flash"
+      weight: 0.4                    # Complex mutations - better reasoning
+
+  # Evaluator models for LLM feedback (if enabled)
+  evaluator_models:
+    - name: "gemini-2.0-flash"
+      weight: 1.0
+
+  # Higher temperature for creative CUDA optimization strategies
+  temperature: 0.8                   # Slightly higher for creative optimizations
+  top_p: 0.95
+  max_tokens: 8192                   # CUDA kernels with optimizations can be long
+
+  timeout: 120                       # Longer timeout for complex generations
+  retries: 5
+  retry_delay: 3
+
+# Prompt configuration with CUDA-specific meta-prompting
+prompt:
+  template_dir: null
+  system_message: |
+    You are an expert CUDA kernel optimization engineer. Your goal is to improve GPU kernel performance by applying proven optimization techniques:
+
+    - Memory optimization: coalescing, shared memory tiling, bank conflict avoidance
+    - Compute optimization: register blocking, loop unrolling, fused operations (fmaf)
+    - Architecture awareness: occupancy tuning, warp-level primitives, vectorized loads
+
+    When making changes:
+    1. Focus on ONE optimization at a time for clarity
+    2. Preserve correctness - verify index calculations carefully
+    3. Consider the GPU architecture (warps, banks, registers)
+    4. Measure before and after to confirm improvement
+
+    Common pitfalls to avoid:
+    - Shared memory bank conflicts (add padding)
+    - Register spilling (check occupancy)
+    - Uncoalesced memory access (check thread indexing)
+    - Race conditions (proper __syncthreads() placement)
+
+  evaluator_system_message: "You are a GPU performance analyst reviewing CUDA kernel changes."
+
+  num_top_programs: 3
+  num_diverse_programs: 3            # More diversity for CUDA exploration
+
+  use_template_stochasticity: true
+  template_variations:
+    improvement_suggestion:
+      - "Apply this CUDA optimization technique:"
+      - "Here's a GPU performance improvement:"
+      - "Try this kernel optimization:"
+      - "This hardware-aware change should help:"
+
+  # Artifact rendering - crucial for CUDA debugging
+  include_artifacts: true
+  max_artifact_bytes: 65536          # 64KB - CUDA profiling output can be verbose
+  artifact_security_filter: true
+
+  # Feature thresholds tuned for CUDA
+  suggest_simplification_after_chars: 2000   # CUDA kernels are naturally larger
+  include_changes_under_chars: 200
+  concise_implementation_max_lines: 30
+  comprehensive_implementation_min_lines: 100
+
+  # Meta-prompting with CUDA-specific strategies
+  meta_prompting:
+    enabled: true                    # Enable learned prompt strategies
+
+    # Thompson sampling - good exploration/exploitation balance
+    selection_algorithm: "thompson_sampling"
+    thompson_prior_alpha: 1.0
+    thompson_prior_beta: 1.0
+
+    # Reward based on actual improvement
+    reward_type: "improvement"
+    improvement_threshold: 0.0       # Any improvement counts
+
+    # Strategy blending
+    meta_prompt_weight: 0.15         # Moderate influence
+    meta_prompt_position: "section"  # Insert as dedicated section
+
+    # Per-island strategies for diversity
+    per_island_strategies: true
+    context_aware: true              # Adapt based on efficiency level
+
+    # Exploration schedule
+    exploration_decay: 0.99          # Slower decay for CUDA - keep exploring
+    min_exploration: 0.1             # Higher minimum - CUDA has many viable strategies
+
+    # History and warmup
+    max_history_per_strategy: 500
+    warmup_iterations: 30            # Learn strategy preferences early
+
+    # Use CUDA-specific strategies derived from GB10 analysis
+    strategies_file: "openevolve/prompts/defaults/meta_fragments_cuda.json"
+
+# Database configuration for CUDA evolution
+database:
+  db_path: null
+  in_memory: true
+  log_prompts: true
+
+  population_size: 500               # Smaller population - CUDA evaluation is expensive
+  archive_size: 50
+  num_islands: 3                     # Fewer islands - focus exploration
+
+  # Migration settings
+  migration_interval: 40             # Less frequent migration
+  migration_rate: 0.15               # More programs migrate when they do
+
+  # Selection ratios - RL will learn to adjust these
+  elite_selection_ratio: 0.15
+  exploration_ratio: 0.25            # Higher baseline exploration for CUDA
+  exploitation_ratio: 0.60
+
+  # Feature dimensions for MAP-Elites
+  # Using metrics that matter for CUDA optimization
+  feature_dimensions:
+    - "complexity"                   # Code complexity (built-in)
+    - "diversity"                    # Structural diversity (built-in)
+    # Note: Add custom metrics from your evaluator:
+    # - "efficiency"                 # GPU efficiency percentage
+    # - "memory_bandwidth"           # Memory bandwidth utilization
+
+  feature_bins: 8                    # Coarser bins for expensive CUDA evaluation
+  diversity_reference_size: 15
+
+# Evaluator configuration for CUDA
+evaluator:
+  timeout: 600                       # 10 minutes - CUDA compilation + benchmark can be slow
+  max_retries: 2                     # Fewer retries - compilation errors are usually deterministic
+
+  # Cascade evaluation for CUDA
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.3                            # Stage 1: Basic correctness (30%)
+    - 0.6                            # Stage 2: Reasonable performance (60%)
+    - 0.8                            # Stage 3: Good performance (80%)
+
+  parallel_evaluations: 2            # Limited by GPU resources
+
+  # LLM feedback for code quality analysis
+  use_llm_feedback: false            # Disable by default - focus on benchmark results
+  llm_feedback_weight: 0.05
+
+# Evolution trace for analysis
+evolution_trace:
+  enabled: true                      # Enable for post-run analysis
+  format: 'jsonl'
+  include_code: true                 # Include CUDA code for debugging
+  include_prompts: true
+  buffer_size: 5
+  compress: false
+
+# RL-based Adaptive Selection
+# Learns optimal selection policy during evolution
+rl:
+  enabled: true                      # Enable RL-based selection
+
+  # Algorithm selection
+  # contextual_thompson: Bayesian, good exploration/exploitation (recommended)
+  # contextual_ucb: Deterministic, consistent exploration
+  # epsilon_greedy: Simple baseline
+  algorithm: "contextual_thompson"
+
+  # State features to observe
+  # These form the context for the contextual bandit
+  state_features:
+    - "normalized_iteration"         # Progress through evolution
+    - "best_fitness"                 # Current best (normalized)
+    - "fitness_improvement_rate"     # Recent improvement trend
+    - "population_diversity"         # Population diversity metric
+    - "archive_coverage"             # MAP-Elites grid coverage
+    - "generations_without_improvement"  # Stagnation indicator
+    - "recent_exploration_success"   # Exploration success rate
+    - "recent_exploitation_success"  # Exploitation success rate
+
+  # Reward calculation tuned for CUDA optimization
+  reward:
+    fitness_weight: 0.7              # Heavy weight on actual performance
+    diversity_weight: 0.15           # Maintain diverse approaches
+    novelty_weight: 0.1              # Reward novel solutions
+    efficiency_weight: 0.05          # Small bonus for efficiency
+    improvement_threshold: 0.001     # Very small improvements count
+    plateau_penalty: 0.05            # Light penalty for stagnation
+    plateau_window: 30               # Window for plateau detection
+
+  # Learning parameters
+  learning_rate: 0.02                # Slightly faster learning
+  discount_factor: 0.95              # Less discounting - recent actions matter
+  exploration_bonus: 1.5             # Moderate UCB exploration
+
+  # Warmup and exploration
+  warmup_iterations: 50              # Random during warmup
+  exploration_decay: 0.99            # Slow decay - keep exploring
+  min_exploration: 0.1               # Always explore some
+
+  # Action tracking
+  action_history_size: 50            # Track recent actions
+  success_window: 15                 # Window for success rates
+
+  # Per-island policies
+  per_island_policies: true          # Each island learns separately
+
+  # Statistics
+  save_detailed_stats: true          # Save for analysis
+
+# Discovery Mode - optional, disabled by default
+discovery:
+  enabled: false
+  problem_description: null
+  skeptic_enabled: false             # Disable for CUDA - benchmark is ground truth
+  surprise_tracking_enabled: true    # Track surprising improvements
+  curiosity_sampling_enabled: true   # Sample surprising programs
+  surprise_bonus_threshold: 0.15
+  solution_threshold: 0.9            # 90% efficiency is a "solution"

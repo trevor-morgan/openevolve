@@ -8,13 +8,15 @@ max_iterations: 200
 checkpoint_interval: 20
 log_level: "INFO"
 
-# LLM configuration
+# LLM configuration - Using Claude Opus via CLIProxyAPI
 llm:
   models:
-    - name: "gemini-2.0-flash"
+    - name: "claude-opus-4-5-20251101"
       weight: 1.0
-  temperature: 0.8
-  max_tokens: 4096
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+  temperature: 1.0  # Claude thinking models require temperature=1
+  max_tokens: 16000  # Increased for more complex responses
 
 # Database configuration
 database:

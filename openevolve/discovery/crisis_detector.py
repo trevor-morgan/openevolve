@@ -18,7 +18,7 @@ import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -49,17 +49,17 @@ class EpistemicCrisis:
     id: str
     crisis_type: str
     confidence: float
-    evidence: Dict[str, Any]
-    suggested_probes: List[str] = field(default_factory=list)
+    evidence: dict[str, Any]
+    suggested_probes: list[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EpistemicCrisis":
+    def from_dict(cls, data: dict[str, Any]) -> "EpistemicCrisis":
         """Deserialize from dictionary"""
         return cls(**data)
 
@@ -77,13 +77,13 @@ class EpistemicCrisis:
     def to_prompt_context(self) -> str:
         """Format crisis for inclusion in LLM prompts"""
         lines = [
-            f"## Epistemic Crisis Detected",
-            f"",
+            "## Epistemic Crisis Detected",
+            "",
             f"**Type**: {self.crisis_type}",
             f"**Confidence**: {self.confidence:.2f} ({self.get_severity()})",
             f"**Suggested Probes**: {', '.join(self.suggested_probes)}",
-            f"",
-            f"### Evidence:",
+            "",
+            "### Evidence:",
         ]
 
         for key, value in self.evidence.items():
@@ -145,12 +145,12 @@ class CrisisDetector:
         self.config = config
 
         # History tracking
-        self.fitness_history: List[Tuple[int, float]] = []  # (iteration, fitness)
-        self.residual_history: List[Dict[str, float]] = []  # Residuals from artifacts
-        self.artifact_history: List[Dict[str, Any]] = []  # Raw artifacts
+        self.fitness_history: list[tuple[int, float]] = []  # (iteration, fitness)
+        self.residual_history: list[dict[str, float]] = []  # Residuals from artifacts
+        self.artifact_history: list[dict[str, Any]] = []  # Raw artifacts
 
         # Crisis tracking
-        self.crisis_history: List[EpistemicCrisis] = []
+        self.crisis_history: list[EpistemicCrisis] = []
         self.last_crisis_iteration: int = -999999  # Track cooldown
 
         logger.info("Initialized CrisisDetector")
@@ -158,8 +158,8 @@ class CrisisDetector:
     def record_evaluation(
         self,
         iteration: int,
-        metrics: Dict[str, float],
-        artifacts: Optional[Dict[str, Any]] = None,
+        metrics: dict[str, float],
+        artifacts: dict[str, Any] | None = None,
     ) -> None:
         """
         Record an evaluation result for analysis.
@@ -190,7 +190,7 @@ class CrisisDetector:
         if len(self.artifact_history) > max_history:
             self.artifact_history = self.artifact_history[-max_history:]
 
-    def detect_crisis(self) -> Optional[EpistemicCrisis]:
+    def detect_crisis(self) -> EpistemicCrisis | None:
         """
         Analyze history for crisis patterns.
 
@@ -248,7 +248,7 @@ class CrisisDetector:
 
         return None
 
-    def _detect_plateau(self) -> Optional[Dict[str, Any]]:
+    def _detect_plateau(self) -> dict[str, Any] | None:
         """
         Detect fitness plateau (stuck at local optimum).
 
@@ -290,13 +290,15 @@ class CrisisDetector:
         # - Smaller improvement = higher confidence
         # - More iterations at plateau = higher confidence
         variance_factor = 1.0 - min(recent_var * 100, 0.5)  # 0.5 to 1.0
-        improvement_factor = 1.0 - min(abs(improvement) / self.config.fitness_improvement_threshold, 0.5)
+        improvement_factor = 1.0 - min(
+            abs(improvement) / self.config.fitness_improvement_threshold, 0.5
+        )
 
         # Check how long we've been at plateau
         plateau_iterations = self._count_plateau_iterations()
         duration_factor = min(plateau_iterations / self.config.min_plateau_iterations, 1.0)
 
-        confidence = (variance_factor * 0.4 + improvement_factor * 0.3 + duration_factor * 0.3)
+        confidence = variance_factor * 0.4 + improvement_factor * 0.3 + duration_factor * 0.3
 
         return {
             "improvement": improvement,
@@ -328,7 +330,7 @@ class CrisisDetector:
 
         return count
 
-    def _detect_systematic_bias(self) -> Optional[Dict[str, Any]]:
+    def _detect_systematic_bias(self) -> dict[str, Any] | None:
         """
         Detect systematic bias in residuals.
 
@@ -348,7 +350,7 @@ class CrisisDetector:
 
         # Aggregate all residuals
         all_residuals = []
-        for residual_dict in self.residual_history[-self.config.min_residual_samples:]:
+        for residual_dict in self.residual_history[-self.config.min_residual_samples :]:
             all_residuals.extend(residual_dict.values())
 
         if not all_residuals:
@@ -391,7 +393,7 @@ class CrisisDetector:
             "confidence": confidence,
         }
 
-    def _detect_unexplained_variance(self) -> Optional[Dict[str, Any]]:
+    def _detect_unexplained_variance(self) -> dict[str, Any] | None:
         """
         Detect high unexplained variance.
 
@@ -478,7 +480,7 @@ class CrisisDetector:
 
         logger.info("CrisisDetector reset - starting fresh analysis")
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get statistics about crisis detection"""
         if not self.fitness_history:
             return {
@@ -498,11 +500,12 @@ class CrisisDetector:
             "recent_fitness_std": np.std(recent_fitness) if recent_fitness else None,
             "iterations_since_last_crisis": (
                 self.fitness_history[-1][0] - self.last_crisis_iteration
-                if self.fitness_history else 0
+                if self.fitness_history
+                else 0
             ),
         }
 
-    def _count_crises_by_type(self) -> Dict[str, int]:
+    def _count_crises_by_type(self) -> dict[str, int]:
         """Count crises by type"""
         counts = {}
         for crisis in self.crisis_history:

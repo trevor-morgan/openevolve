@@ -115,7 +115,7 @@ This leads to faster convergence because the LLM gets specific, actionable feedb
 ### Backward Compatibility
 
 The artifacts enhancement is fully backward compatible:
-- **Existing evaluators** continue to work unchanged 
+- **Existing evaluators** continue to work unchanged
 - **Enhanced evaluators** return `EvaluationResult` with both metrics and artifacts
 - **Disable artifacts** by setting `export ENABLE_ARTIFACTS=false` if needed
 
@@ -273,7 +273,7 @@ The breakthrough came when OpenEvolve discovered the power of mathematical optim
 # Final solution with scipy.optimize
 def construct_packing():
     # ... initialization code ...
-    
+
     # Objective function: Negative sum of radii (to maximize)
     def objective(x):
         centers = x[:2*n].reshape(n, 2)
@@ -284,7 +284,7 @@ def construct_packing():
     def constraint(x):
         centers = x[:2*n].reshape(n, 2)
         radii = x[2*n:]
-        
+
         # Overlap constraint
         overlap_constraints = []
         for i in range(n):
@@ -292,7 +292,7 @@ def construct_packing():
                 dist = np.sqrt(np.sum((centers[i] - centers[j])**2))
                 overlap_constraints.append(dist - (radii[i] + radii[j]))
         # ... boundary constraints ...
-        
+
     # Optimization using SLSQP
     result = minimize(objective, x0, method='SLSQP', bounds=bounds, constraints=constraints)
 ```

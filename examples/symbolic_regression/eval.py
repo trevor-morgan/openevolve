@@ -1,20 +1,19 @@
-from typing import Dict, Any  # List removed as it's not used
+import importlib.util
 import json
-import os
+import sys
 from pathlib import Path
+from typing import Any  # List removed as it's not used
+
 import numpy as np
+from scipy.optimize import minimize
 
 # import time # Not used
 from scipy.stats import kendalltau
 from sklearn.metrics import mean_absolute_percentage_error
-from scipy.optimize import minimize
-import importlib.util
-import sys
 
 # import traceback # Not used
 # import json # Not used
 # Example custom JSON encoder if you need to save results with numpy types
-import json
 
 
 class NumpyFloatJSONEncoder(json.JSONEncoder):
@@ -28,7 +27,7 @@ class NumpyFloatJSONEncoder(json.JSONEncoder):
         return super(NumpyFloatJSONEncoder, self).default(obj)
 
 
-def compute_output_base_metrics(y_pred: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
+def compute_output_base_metrics(y_pred: np.ndarray, y: np.ndarray) -> dict[str, Any]:
     """
     Computes base metrics after filtering NaNs from predictions.
     Ensures inputs y_pred and y are treated as 1D arrays.
@@ -147,7 +146,7 @@ def objective_function(
 def evaluation(
     program_path: str,
     data_path: str,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """
     Evaluates a model by loading it, optimizing its parameters, and testing it.
     The model function from program_path is expected to be named 'func'.
@@ -161,7 +160,7 @@ def evaluation(
         "num_valid_points": 0,
     }
 
-    def _create_error_return(error_message: str) -> Dict[str, Dict[str, Any]]:
+    def _create_error_return(error_message: str) -> dict[str, dict[str, Any]]:
         print(f"Error: {error_message}")
         return {
             "train_metrics": {**base_error_metrics, "error": error_message},
@@ -181,7 +180,7 @@ def evaluation(
     except FileNotFoundError as e:
         return _create_error_return(f"Data file not found: {e.filename}")
     except Exception as e:
-        return _create_error_return(f"Error loading or processing data: {str(e)}")
+        return _create_error_return(f"Error loading or processing data: {e!s}")
 
     # 2. Load program (model function)
     model_func = None
@@ -202,7 +201,7 @@ def evaluation(
             raise AttributeError(f"'func' function not found or not callable in {program_path}")
     except Exception as e:
         return _create_error_return(
-            f"Failed to load model function 'func' from '{program_path}': {str(e)}"
+            f"Failed to load model function 'func' from '{program_path}': {e!s}"
         )
 
     # 3. Optimize parameters on training data
@@ -249,7 +248,7 @@ def evaluation(
 
         except Exception as e:
             optimization_critical_error_msg = (
-                f"Critical error during optimization attempt {i+1} for {program_path}: {str(e)}"
+                f"Critical error during optimization attempt {i+1} for {program_path}: {e!s}"
             )
             print(f"Error: {optimization_critical_error_msg}")
             break
@@ -259,7 +258,7 @@ def evaluation(
 
     def _get_metrics_for_set(
         X_data: np.ndarray, y_data: np.ndarray, set_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if optimized_params is None:
             msg = f"Optimization failed to find parameters for {program_path}, cannot evaluate {set_name}."
             return {**base_error_metrics, "error": msg}
@@ -273,7 +272,7 @@ def evaluation(
                 print(f"Warning for {set_name} ({program_path}): {metrics['error']}")
             return metrics
         except Exception as e:
-            error_msg = f"{set_name} evaluation failed for '{program_path}': {str(e)}"
+            error_msg = f"{set_name} evaluation failed for '{program_path}': {e!s}"
             print(f"Error: {error_msg}")
             return {**base_error_metrics, "error": error_msg}
 

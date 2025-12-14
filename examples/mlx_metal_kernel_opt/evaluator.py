@@ -26,13 +26,10 @@ This evaluator provides MAXIMUM protection against Metal kernel failures during 
 
 import os
 import sys
-import json
 import time
 import traceback
-import threading
-import subprocess
-import tempfile
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Any, Optional
+
 import numpy as np
 
 # Add current directory to path for imports
@@ -42,7 +39,7 @@ import mlx.core as mx
 import mlx.nn as nn
 
 # Import the comprehensive benchmark suite for consistent testing
-from qwen3_benchmark_suite import Qwen3BenchmarkSuite, BenchmarkConfig, BenchmarkResult
+from qwen3_benchmark_suite import BenchmarkConfig, BenchmarkResult, Qwen3BenchmarkSuite
 
 
 class MetalKernelSafetyError(Exception):
@@ -98,11 +95,11 @@ class BulletproofMetalEvaluator:
         print("🛡️  BULLETPROOF METAL KERNEL EVALUATOR INITIALIZED")
         print(f"📱 Model: {self.model_path}")
         print(f"🔁 Max retry attempts: {self.max_retry_attempts}")
-        print(f"⚡ GPU error protection: MAXIMUM")
-        print(f"🧠 Memory safety validation: ENABLED")
-        print(f"🎯 Command buffer error handling: ACTIVE")
+        print("⚡ GPU error protection: MAXIMUM")
+        print("🧠 Memory safety validation: ENABLED")
+        print("🎯 Command buffer error handling: ACTIVE")
 
-    def evaluate(self, program_text: str) -> Dict[str, Any]:
+    def evaluate(self, program_text: str) -> dict[str, Any]:
         """
         BULLETPROOF evaluation that handles ALL Metal kernel failures:
         1. Enhanced program extraction with syntax validation
@@ -209,7 +206,7 @@ class BulletproofMetalEvaluator:
         except Exception as e:
             # Ultimate protection: even this top-level catch must never crash evolution
             self.total_metal_errors += 1
-            error_msg = f"TOP-LEVEL BULLETPROOF CATCH: {str(e)}"
+            error_msg = f"TOP-LEVEL BULLETPROOF CATCH: {e!s}"
             print(f"🛡️  {error_msg}")
             traceback.print_exc()
             return self._create_comprehensive_failure_result(error_msg)
@@ -224,7 +221,7 @@ class BulletproofMetalEvaluator:
         self.successful_fallbacks = 0
         self.retry_attempts_used = 0
 
-    def _bulletproof_extract_custom_attention(self, program_text: str) -> Dict[str, Any]:
+    def _bulletproof_extract_custom_attention(self, program_text: str) -> dict[str, Any]:
         """Bulletproof extraction with comprehensive Metal kernel validation"""
         try:
             print("  🔍 Bulletproof program analysis with Metal validation...")
@@ -238,7 +235,7 @@ class BulletproofMetalEvaluator:
                 print(f"  📁 Reading program from file: {program_text}")
                 if os.path.exists(program_text):
                     try:
-                        with open(program_text, "r") as f:
+                        with open(program_text) as f:
                             actual_program_text = f.read()
                     except Exception as e:
                         return {"success": False, "error": f"File read error: {e}"}
@@ -292,16 +289,16 @@ class BulletproofMetalEvaluator:
             if not validation_result["valid"]:
                 return {"success": False, "error": validation_result["error"]}
 
-            print(f"  ✅ Successfully extracted and validated CustomGQAAttention class")
+            print("  ✅ Successfully extracted and validated CustomGQAAttention class")
             print(f"  🛡️  Metal safety pre-checks: {metal_validation['safe']}")
 
             return {"success": True, "class": custom_class, "metal_validation": metal_validation}
 
         except Exception as e:
             self.total_metal_errors += 1
-            return {"success": False, "error": f"Bulletproof extraction failed: {str(e)}"}
+            return {"success": False, "error": f"Bulletproof extraction failed: {e!s}"}
 
-    def _static_validate_metal_kernel_syntax(self, program_text: str) -> Dict[str, Any]:
+    def _static_validate_metal_kernel_syntax(self, program_text: str) -> dict[str, Any]:
         """Static analysis of Metal kernel syntax for common safety issues"""
         warnings = []
 
@@ -338,7 +335,7 @@ class BulletproofMetalEvaluator:
             "has_bounds_checking": has_bounds_checking,
         }
 
-    def _validate_custom_attention_class(self, custom_class: Any) -> Dict[str, Any]:
+    def _validate_custom_attention_class(self, custom_class: Any) -> dict[str, Any]:
         """Comprehensive validation of custom attention class"""
         try:
             # Basic type checking
@@ -361,7 +358,7 @@ class BulletproofMetalEvaluator:
         except Exception as e:
             return {"valid": False, "error": f"Class validation error: {e}"}
 
-    def _validate_metal_kernel_safety(self, custom_attention_class: Any) -> Dict[str, Any]:
+    def _validate_metal_kernel_safety(self, custom_attention_class: Any) -> dict[str, Any]:
         """Pre-execution validation of Metal kernel safety"""
         try:
             print("  🔍 Validating Metal kernel safety parameters...")
@@ -409,7 +406,7 @@ class BulletproofMetalEvaluator:
             self.total_metal_errors += 1
             return {"success": False, "error": f"Safety validation error: {e}"}
 
-    def _bulletproof_execute_with_gpu_protection(self, func) -> Tuple[bool, Any]:
+    def _bulletproof_execute_with_gpu_protection(self, func) -> tuple[bool, Any]:
         """Execute function with maximum GPU and Metal kernel protection"""
         try:
             # Clear any existing GPU state
@@ -450,7 +447,7 @@ class BulletproofMetalEvaluator:
             else:
                 return False, f"Execution Error: {error_msg}"
 
-    def _gpu_protected_measure_baseline(self) -> Optional[List[BenchmarkResult]]:
+    def _gpu_protected_measure_baseline(self) -> list[BenchmarkResult] | None:
         """GPU-protected baseline measurement with enhanced error handling"""
         try:
             print("  📊 Running GPU-protected baseline benchmark...")
@@ -527,7 +524,7 @@ class BulletproofMetalEvaluator:
             print(f"  ❌ GPU-protected baseline measurement failed: {e}")
             return None
 
-    def _memory_safe_correctness_test(self, custom_attention_class: Any) -> Dict[str, Any]:
+    def _memory_safe_correctness_test(self, custom_attention_class: Any) -> dict[str, Any]:
         """Memory-safe correctness testing with GPU protection"""
         print("  🔍 Running memory-safe correctness testing...")
 
@@ -721,7 +718,7 @@ class BulletproofMetalEvaluator:
             else:
                 raise ValueError(f"Sequence test error: {error_msg}")
 
-    def _command_buffer_protected_benchmark(self, custom_attention_class: Any) -> Dict[str, Any]:
+    def _command_buffer_protected_benchmark(self, custom_attention_class: Any) -> dict[str, Any]:
         """Command-buffer-protected benchmarking with maximum safety"""
         print("  🚀 Running command-buffer-protected benchmarking...")
 
@@ -824,7 +821,7 @@ class BulletproofMetalEvaluator:
                     self._gpu_protected_remove_hook(original_attention)
 
             except Exception as e:
-                error_msg = f"Command-buffer-protected attempt failed: {str(e)}"
+                error_msg = f"Command-buffer-protected attempt failed: {e!s}"
                 print(f"  ❌ {error_msg}")
                 if retry_attempt < self.max_retry_attempts:
                     retry_attempt += 1
@@ -847,7 +844,7 @@ class BulletproofMetalEvaluator:
         except Exception as e:
             print(f"    ⚠️  GPU state cleanup warning: {e}")
 
-    def _gpu_protected_apply_hook(self, custom_attention_class: Any) -> Dict[str, Any]:
+    def _gpu_protected_apply_hook(self, custom_attention_class: Any) -> dict[str, Any]:
         """GPU-protected application of custom attention hook"""
         try:
             success, result = self._bulletproof_execute_with_gpu_protection(
@@ -901,12 +898,13 @@ class BulletproofMetalEvaluator:
         qwen3_module.Attention = original_attention
         print("      ✅ Hook removed with GPU protection")
 
-    def _create_bulletproof_execution_environment(self) -> Dict[str, Any]:
+    def _create_bulletproof_execution_environment(self) -> dict[str, Any]:
         """Create bulletproof execution environment with enhanced imports"""
         import math
-        import numpy as np
         import time
-        from typing import Optional, Tuple, Any
+        from typing import Any
+
+        import numpy as np
 
         exec_globals = {
             "__builtins__": __builtins__,
@@ -916,7 +914,7 @@ class BulletproofMetalEvaluator:
             "math": math,
             "time": time,
             "Optional": Optional,
-            "Tuple": Tuple,
+            "Tuple": tuple,
             "Any": Any,
         }
 
@@ -931,7 +929,7 @@ class BulletproofMetalEvaluator:
 
         return exec_globals
 
-    def _get_safe_benchmark_configs(self) -> List[BenchmarkConfig]:
+    def _get_safe_benchmark_configs(self) -> list[BenchmarkConfig]:
         """Get safer benchmark configurations for GPU protection"""
         try:
             all_configs = self.benchmark_suite.create_benchmark_configs()
@@ -969,7 +967,7 @@ class BulletproofMetalEvaluator:
         except ImportError:
             print("  ⚠️  Could not access qwen3 module for standard attention")
 
-    def _store_enhanced_baseline_metrics(self, baseline_results: List[BenchmarkResult]):
+    def _store_enhanced_baseline_metrics(self, baseline_results: list[BenchmarkResult]):
         """Store enhanced baseline metrics"""
         decode_speeds = [
             r.decode_tokens_per_sec for r in baseline_results if r.decode_tokens_per_sec > 0
@@ -996,8 +994,8 @@ class BulletproofMetalEvaluator:
         )
 
     def _analyze_performance_with_safety_metrics(
-        self, baseline_results: List[BenchmarkResult], custom_results: List[BenchmarkResult]
-    ) -> Dict[str, Any]:
+        self, baseline_results: list[BenchmarkResult], custom_results: list[BenchmarkResult]
+    ) -> dict[str, Any]:
         """Analyze performance with enhanced safety metrics"""
         print("  📈 Analyzing performance with safety metrics...")
 
@@ -1030,10 +1028,12 @@ class BulletproofMetalEvaluator:
                     custom.total_tokens_per_sec, baseline.total_tokens_per_sec
                 )
                 memory_improvement = self._safe_calculate_improvement(
-                    baseline.peak_memory_gb, custom.peak_memory_gb  # Reversed for memory
+                    baseline.peak_memory_gb,
+                    custom.peak_memory_gb,  # Reversed for memory
                 )
                 time_improvement = self._safe_calculate_improvement(
-                    baseline.total_time_sec, custom.total_time_sec  # Reversed for time
+                    baseline.total_time_sec,
+                    custom.total_time_sec,  # Reversed for time
                 )
 
                 comparison = {
@@ -1157,7 +1157,7 @@ class BulletproofMetalEvaluator:
         return safety_score
 
     def _calculate_safety_adjusted_score(
-        self, performance_analysis: Dict[str, Any], correctness: float
+        self, performance_analysis: dict[str, Any], correctness: float
     ) -> float:
         """Calculate final score adjusted for safety"""
         if correctness < 0.90:
@@ -1190,7 +1190,7 @@ class BulletproofMetalEvaluator:
             - error_penalty
         )
 
-        print(f"  🎯 Safety-adjusted score breakdown:")
+        print("  🎯 Safety-adjusted score breakdown:")
         print(f"    • Performance: {avg_improvement:.2f}% × 3 = {performance_score:.2f}")
         print(f"    • Memory: {memory_bonus:.2f}")
         print(f"    • Consistency: {success_rate:.2f} × 10 = {consistency_bonus:.2f}")
@@ -1202,7 +1202,7 @@ class BulletproofMetalEvaluator:
         return final_score
 
     def _generate_comprehensive_summary(
-        self, performance_analysis: Dict[str, Any], correctness: float
+        self, performance_analysis: dict[str, Any], correctness: float
     ) -> str:
         """Generate comprehensive evaluation summary with safety info"""
         comparison = performance_analysis["comparison_summary"]
@@ -1243,7 +1243,7 @@ class BulletproofMetalEvaluator:
 
         return summary
 
-    def _get_comprehensive_error_statistics(self) -> Dict[str, Any]:
+    def _get_comprehensive_error_statistics(self) -> dict[str, Any]:
         """Get comprehensive error statistics"""
         return {
             "metal_command_buffer_errors": self.metal_command_buffer_errors,
@@ -1272,7 +1272,7 @@ class BulletproofMetalEvaluator:
             },
         }
 
-    def _print_bulletproof_evaluation_results(self, result: Dict[str, Any]):
+    def _print_bulletproof_evaluation_results(self, result: dict[str, Any]):
         """Print comprehensive bulletproof evaluation results"""
         print(f"\n{'🛡️ '*25}")
         print(f"{'🛡️  BULLETPROOF EVALUATION RESULTS  🛡️':^100}")
@@ -1284,8 +1284,8 @@ class BulletproofMetalEvaluator:
             safety_stats = result["metal_safety_statistics"]
 
             print(f"📊 FINAL SCORE: {result['final_score']:.2f}")
-            print(f"")
-            print(f"📈 PERFORMANCE COMPARISON:")
+            print("")
+            print("📈 PERFORMANCE COMPARISON:")
             print(f"  • Average Decode Speed: {performance['avg_decode_speed']:.1f} tokens/sec")
             print(
                 f"  • Baseline Decode Speed: {self.baseline_metrics['avg_decode_speed']:.1f} tokens/sec"
@@ -1294,20 +1294,20 @@ class BulletproofMetalEvaluator:
             print(
                 f"  • Absolute Improvement: {comparison['avg_decode_improvement_absolute']:+.1f} tokens/sec"
             )
-            print(f"")
-            print(f"🛡️  SAFETY STATISTICS:")
+            print("")
+            print("🛡️  SAFETY STATISTICS:")
             print(f"  • Safety Score: {safety_stats['safety_score']:.1f}/100")
             print(f"  • Command Buffer Errors: {safety_stats['metal_command_buffer_errors']}")
             print(f"  • Memory Violations: {safety_stats['metal_memory_violations']}")
             print(f"  • Total Metal Errors: {safety_stats['total_metal_errors']}")
             print(f"  • Retry Attempts Used: {safety_stats['retry_attempts_used']}")
-            print(f"")
-            print(f"💾 MEMORY USAGE:")
+            print("")
+            print("💾 MEMORY USAGE:")
             print(f"  • Average Memory: {performance['avg_memory_gb']:.2f} GB")
             print(f"  • Baseline Memory: {self.baseline_metrics['avg_memory_gb']:.2f} GB")
             print(f"  • Memory Change: {comparison['memory_change_gb']:+.2f} GB")
-            print(f"")
-            print(f"✓ RELIABILITY:")
+            print("")
+            print("✓ RELIABILITY:")
             print(f"  • Correctness Score: {result['correctness_score']:.1%}")
             print(f"  • Successful Tests: {performance['num_successful_tests']}")
             print(
@@ -1315,20 +1315,20 @@ class BulletproofMetalEvaluator:
             )
 
             if comparison["target_achieved"]:
-                print(f"\n🎯 TARGET ACHIEVED: Significant improvement with safety!")
+                print("\n🎯 TARGET ACHIEVED: Significant improvement with safety!")
 
             if safety_stats["total_metal_errors"] == 0:
-                print(f"\n🛡️  PERFECT EXECUTION: No Metal kernel errors encountered!")
+                print("\n🛡️  PERFECT EXECUTION: No Metal kernel errors encountered!")
 
         else:
-            print(f"❌ EVALUATION FAILED (SAFELY)")
+            print("❌ EVALUATION FAILED (SAFELY)")
             print(f"📋 Error: {result.get('error', 'Unknown error')}")
             safety_stats = result.get("metal_safety_statistics", {})
             print(f"🛡️  Metal Errors Handled: {safety_stats.get('total_metal_errors', 0)}")
 
         print(f"{'🛡️ '*25}")
 
-    def _create_comprehensive_failure_result(self, error_message: str) -> Dict[str, Any]:
+    def _create_comprehensive_failure_result(self, error_message: str) -> dict[str, Any]:
         """Create comprehensive failure result with full error statistics"""
         return {
             "success": False,
@@ -1341,7 +1341,7 @@ class BulletproofMetalEvaluator:
             "safety_validation": {"success": False, "error": error_message},
         }
 
-    def _result_to_dict(self, result: BenchmarkResult) -> Dict:
+    def _result_to_dict(self, result: BenchmarkResult) -> dict:
         """Convert BenchmarkResult to dictionary"""
         return {
             "name": result.name,
@@ -1353,7 +1353,7 @@ class BulletproofMetalEvaluator:
         }
 
 
-def evaluate(program_text: str) -> Dict[str, Any]:
+def evaluate(program_text: str) -> dict[str, Any]:
     """🛡️ BULLETPROOF evaluation function called by OpenEvolve"""
     evaluator = BulletproofMetalEvaluator()
     return evaluator.evaluate(program_text)
@@ -1374,7 +1374,7 @@ def test_bulletproof_evaluator():
     result = evaluate(initial_program_path)
 
     print(f"\n{'🛡️ '*20}")
-    print(f"🔬 BULLETPROOF EVALUATOR TEST RESULTS")
+    print("🔬 BULLETPROOF EVALUATOR TEST RESULTS")
     print(f"{'🛡️ '*20}")
     print(f"Success: {result['success']}")
     print(f"Final Score: {result.get('final_score', 'N/A')}")

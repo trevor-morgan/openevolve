@@ -3,7 +3,6 @@ Test OpenAI reasoning model detection logic
 """
 
 import unittest
-from unittest.mock import MagicMock
 
 
 class TestOpenAIReasoningModelDetection(unittest.TestCase):

@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 """
 Unified Evaluator for Scaling Law Discovery.
 """
+
 import argparse
 import concurrent.futures
 import importlib.util
@@ -9,7 +9,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any
 
 import numpy as np
 
@@ -26,12 +26,13 @@ SUPPORTED_TASKS = {
     "domain_mixture_scaling_law",
     "lr_bsz_scaling_law",
     "parallel_scaling_law",
-    "easy_question_scaling_law"
+    "easy_question_scaling_law",
 }
 
 # --- Core Functions ---
 
-def get_failure_result(error_msg: str = "Evaluation failed or timed out.") -> Dict[str, Any]:
+
+def get_failure_result(error_msg: str = "Evaluation failed or timed out.") -> dict[str, Any]:
     """Returns a standardized dictionary for failure cases."""
     return {
         "nmse": 100000.0,
@@ -40,6 +41,7 @@ def get_failure_result(error_msg: str = "Evaluation failed or timed out.") -> Di
         "combined_score": 0.0,
         "error": error_msg,
     }
+
 
 def run_with_timeout(func, args=(), kwargs={}, timeout_seconds: int = 600):
     """Runs a function with a specified timeout, raising an exception on timeout."""
@@ -51,10 +53,11 @@ def run_with_timeout(func, args=(), kwargs={}, timeout_seconds: int = 600):
             print(f"Function {func.__name__} timed out or failed: {e}", file=sys.stderr)
             raise
 
+
 def calculate_final_metrics(
     predictions: np.ndarray,
     true_values: np.ndarray,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Calculates evaluation metrics, correctly handling multi-dimensional outputs.
 
@@ -88,7 +91,9 @@ def calculate_final_metrics(
 
     # 4. Final shape validation
     if true.shape != pred.shape:
-        return get_failure_result(f"Shape mismatch: true values {true.shape} vs. predictions {pred.shape}.")
+        return get_failure_result(
+            f"Shape mismatch: true values {true.shape} vs. predictions {pred.shape}."
+        )
     if true.size == 0:
         return get_failure_result("Cannot evaluate on empty data.")
 
@@ -101,16 +106,22 @@ def calculate_final_metrics(
     mean_abs_dev_per_dim = np.mean(np.abs(true - np.mean(true, axis=0)), axis=0)
 
     # 7. Calculate normalized metrics, avoiding division by zero
-    nmse_per_dim = np.divide(test_mse_per_dim, variance_per_dim,
-                             out=np.full_like(test_mse_per_dim, np.inf), # Use np.inf where variance is zero
-                             where=variance_per_dim > 1e-9)
-    nmae_per_dim = np.divide(test_mae_per_dim, mean_abs_dev_per_dim,
-                             out=np.full_like(test_mae_per_dim, np.inf), # Use np.inf where MAD is zero
-                             where=mean_abs_dev_per_dim > 1e-9)
+    nmse_per_dim = np.divide(
+        test_mse_per_dim,
+        variance_per_dim,
+        out=np.full_like(test_mse_per_dim, np.inf),  # Use np.inf where variance is zero
+        where=variance_per_dim > 1e-9,
+    )
+    nmae_per_dim = np.divide(
+        test_mae_per_dim,
+        mean_abs_dev_per_dim,
+        out=np.full_like(test_mae_per_dim, np.inf),  # Use np.inf where MAD is zero
+        where=mean_abs_dev_per_dim > 1e-9,
+    )
 
     # 8. Calculate R^2 for each dimension
     r2_per_dim = 1.0 - nmse_per_dim
-    
+
     # 9. Average per-dimension metrics for final aggregate scores
     nmse = np.mean(nmse_per_dim)
     nmae = np.mean(nmae_per_dim)
@@ -144,6 +155,7 @@ def _import_program(program_path: str):
     spec.loader.exec_module(module)
     return module
 
+
 def resolve_task_name(program_path: str) -> str:
     """Infers the task name from environment variables or the file path."""
     env_task = os.getenv("EVAL_TASK_NAME") or os.getenv("SCALING_TASK_NAME")
@@ -163,14 +175,16 @@ def resolve_task_name(program_path: str) -> str:
         "is in the script's parent folder or file name."
     )
 
+
 # --- Evaluation Pipelines ---
+
 
 def evaluate_core(
     program_path: str,
     task_name: str,
     use_test_data: bool = False,
-    fitted_params_map: Dict[Any, Any] = None,
-) -> Dict[str, Union[float, Dict]]:
+    fitted_params_map: dict[Any, Any] = None,
+) -> dict[str, float | dict]:
     """
     Core evaluation logic: fits a model or evaluates it on test data.
     """
@@ -226,7 +240,8 @@ def evaluate_core(
         traceback.print_exc(file=sys.stderr)
         return get_failure_result(str(e))
 
-def evaluate(program_path: str, verbose: bool = False) -> Dict[str, Any]:
+
+def evaluate(program_path: str, verbose: bool = False) -> dict[str, Any]:
     """
     High-level, single-call evaluation function.
 
@@ -270,11 +285,14 @@ def evaluate(program_path: str, verbose: bool = False) -> Dict[str, Any]:
         test_result["task_name"] = task_name
     return test_result
 
+
 # --- Script Entrypoint ---
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified Evaluator for Scaling Law Discovery.")
-    parser.add_argument("program_path", type=str, help="Path to the Python script with scaling law functions.")
+    parser.add_argument(
+        "program_path", type=str, help="Path to the Python script with scaling law functions."
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.program_path):
@@ -284,10 +302,10 @@ if __name__ == "__main__":
     print(f"--- Running Evaluation for Program: {args.program_path} ---")
     final_results = evaluate(args.program_path, verbose=True)
 
-    task_name = final_results.get('task_name', 'N/A')
+    task_name = final_results.get("task_name", "N/A")
     print(f"Inferred Task: {task_name}")
 
-    if "error" in final_results and final_results["error"]:
+    if final_results.get("error"):
         print("\n--- ⛔ EVALUATION FAILED ⛔ ---")
         print(f"Error: {final_results['error']}")
         sys.exit(1)
@@ -297,7 +315,7 @@ if __name__ == "__main__":
     print(f"  Normalized MAE (NMAE): {final_results.get('nmae', 'N/A'):.6f}")
     print(f"  R-squared (R²):        {final_results.get('r2', 'N/A'):.6f}")
     print(f"  Combined Score:        {final_results.get('combined_score', 'N/A'):.6f}")
-    
+
     # Print per-dimension metrics if they exist
     if "nmse_per_dim" in final_results:
         print("\n  --- Per-Dimension Metrics ---")
@@ -307,14 +325,16 @@ if __name__ == "__main__":
         for i, (nmse_d, nmae_d, r2_d) in enumerate(zip(nmse_vals, nmae_vals, r2_vals)):
             print(f"    Dim {i+1}: NMSE={nmse_d:.4f}, NMAE={nmae_d:.4f}, R²={r2_d:.4f}")
 
-    params = final_results.get('fitted_params', {})
+    params = final_results.get("fitted_params", {})
     if params:
         print(f"\nFitted parameters for {len(params)} group(s):")
         for key, val in params.items():
             param_val = np.asarray(val)
             if param_val.size > 1:
-                param_str = np.array2string(param_val, precision=4, max_line_width=80, suppress_small=True)
+                param_str = np.array2string(
+                    param_val, precision=4, max_line_width=80, suppress_small=True
+                )
             else:
-                param_str = f"{param_val.item():.4f}" # Use .item() for single-element arrays
+                param_str = f"{param_val.item():.4f}"  # Use .item() for single-element arrays
             print(f"  - Group '{key}': {param_str}")
     print("--------------------------")

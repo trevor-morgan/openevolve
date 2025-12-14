@@ -11,11 +11,12 @@
 #
 # ===--------------------------------------------------------------------------------------===#
 
-import sys
-import os
-from importlib import __import__
-import time
 import itertools
+import os
+import sys
+import time
+from importlib import __import__
+
 import numpy as np
 
 DIM = 11
@@ -43,7 +44,7 @@ def verify_sphere_packing(sphere_centers: np.ndarray, tol: float = 1e-6):
 
     # Checks that the set doesn't contain 0.
     min_squared_norm = min(squared_norms)
-    assert min_squared_norm > tol, f"Verification failed because the set contains 0."
+    assert min_squared_norm > tol, "Verification failed because the set contains 0."
 
     # Checks that the minimum pairwise distance between centers >= the maximum norm of the centers.
     max_squared_norm = max(squared_norms)

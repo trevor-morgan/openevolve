@@ -7,16 +7,21 @@ answer string.
 """
 
 from __future__ import annotations
-import subprocess, tempfile, json, os, argparse, math, pathlib
+
+import argparse
+import json
+import os
+import pathlib
+import subprocess
+from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Tuple, Any, Iterable
+from typing import Any
 
 import lm_eval
-from lm_eval.tasks import TaskManager
-from lm_eval.evaluator import evaluate
 from lm_eval.api.model import LM
 from lm_eval.api.registry import register_model
-from datetime import datetime
+from lm_eval.evaluator import evaluate
 
 # cd to the parent parent directory of this file
 os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -32,7 +37,7 @@ class OpenEvolve(LM):
         evaluator_file: str = "evaluator_stub.py",
         config_file: str = "config.yml",
         iterations: int = 5,
-        extra_param: List[str] = [],
+        extra_param: list[str] = [],
         **kwargs,
     ):
         super().__init__()
@@ -48,7 +53,7 @@ class OpenEvolve(LM):
         self.best_path = "examples/lm_eval/openevolve_output/best/best_program.txt"
         self.base_system_message = "You are an expert task solver, with a lot of commonsense, math, language and coding knowledge.\n\nConsider this task:\n```{prompt}´´´"
 
-    def generate(self, prompts: List[str], max_gen_toks: int = None, stop=None, **kwargs):
+    def generate(self, prompts: list[str], max_gen_toks: int = None, stop=None, **kwargs):
         outs = []
         for prompt in prompts:
             # Task prompt becomes the system message. User prompt is the evolutionary logic.
@@ -92,7 +97,7 @@ class OpenEvolve(LM):
         return outs
 
     # for tasks that ask for log likelihood, indicate that it is unsupported
-    def loglikelihood(self, requests: Iterable[Tuple[str, str]], **kw):
+    def loglikelihood(self, requests: Iterable[tuple[str, str]], **kw):
         # return [(-math.inf, False) for _ in requests]
         raise NotImplementedError
 
@@ -100,7 +105,7 @@ class OpenEvolve(LM):
         # return [(-math.inf, False) for _ in requests]
         raise NotImplementedError
 
-    def generate_until(self, requests: Iterable[Any], **kw) -> List[str]:
+    def generate_until(self, requests: Iterable[Any], **kw) -> list[str]:
         ctxs, stops = [], []
 
         for req in requests:

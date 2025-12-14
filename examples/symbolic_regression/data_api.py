@@ -5,17 +5,16 @@ This module creates initial programs, evaluators, and configurations for symboli
 It processes multiple datasets in parallel and generates the necessary files for each problem.
 """
 
-import os
-import yaml
-import numpy as np
 import multiprocessing
-import importlib.util
-from typing import Dict, List, Tuple, Optional, Any
+import os
+from typing import Any
 
+import numpy as np
+import yaml
 from bench.datamodules import get_datamodule
 
 
-def load_secret(secrets_file: str = "secrets.yaml") -> Dict[str, Any]:
+def load_secret(secrets_file: str = "secrets.yaml") -> dict[str, Any]:
     """
     Load API keys and configuration from a secrets file.
 
@@ -26,7 +25,7 @@ def load_secret(secrets_file: str = "secrets.yaml") -> Dict[str, Any]:
         Dictionary containing secret configuration, empty dict if file not found
     """
     try:
-        with open(secrets_file, "r") as f:
+        with open(secrets_file) as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
         print(f"Warning: Secrets file '{secrets_file}' not found.")
@@ -38,7 +37,7 @@ def load_secret(secrets_file: str = "secrets.yaml") -> Dict[str, Any]:
 
 def extract_problem_data_from_initialized_dataset(
     initialized_dataset, problem_id: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Extract data for a specific problem from an initialized dataset.
 
@@ -67,7 +66,7 @@ def extract_problem_data_from_initialized_dataset(
     return data
 
 
-def create_program(problem: Dict[str, Any]) -> str:
+def create_program(problem: dict[str, Any]) -> str:
     """
     Create a Python script with a naive linear model for symbolic regression.
 
@@ -166,7 +165,7 @@ def func(x, params):
     """
     result = {function_body}
     return result
-    
+
 # EVOLVE-BLOCK-END
 
 # This part remains fixed (not evolved)
@@ -182,7 +181,7 @@ def run_search():
     return file_path
 
 
-def create_evaluator(problem: Dict[str, Any]) -> str:
+def create_evaluator(problem: dict[str, Any]) -> str:
     """
     Create an evaluator script for the symbolic regression problem.
 
@@ -280,7 +279,7 @@ def run_with_timeout(func, args=(), kwargs={{}}, timeout_seconds=5):
     """Execute a function with a timeout."""
     if timeout_seconds is None or timeout_seconds <= 0:
         return func(*args, **kwargs)
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(func, *args, **kwargs)
         try:
@@ -294,7 +293,7 @@ def filter_and_convert_metrics(current_metrics_dict):
     """Filter and convert metrics to appropriate types."""
     filtered_dict = {{}}
     float_metric_keys = ['combined_score', 'negative_mse']
-    
+
     for key in float_metric_keys:
         if key in current_metrics_dict:
             value = current_metrics_dict[key]
@@ -305,7 +304,7 @@ def filter_and_convert_metrics(current_metrics_dict):
                     filtered_dict[key] = float(value)
                 except (ValueError, TypeError):
                     pass
-    
+
     return filtered_dict
 
 
@@ -313,29 +312,29 @@ def objective_function(params, model_func, X_matrix, y_true_vector):
     """
     Objective function for scipy.optimize.minimize.
     Calculates MSE of the model_func with given params on X_matrix, y_true_vector.
-    
+
     Args:
         params: Parameter vector for the model
         model_func: Function that takes (X_matrix, params) and returns predictions
         X_matrix: Input features matrix (n_samples, n_features)
         y_true_vector: True output values (n_samples,)
-        
+
     Returns:
         MSE value or inf if computation fails
     """
     if not callable(model_func):
         return float('inf')
-    
+
     try:
         predictions = model_func(X_matrix, params)
         if not isinstance(predictions, np.ndarray) or predictions.shape != y_true_vector.shape:
             return float('inf')
     except Exception:
         return float('inf')
-    
+
     if np.any(np.isnan(predictions)) or np.any(np.isinf(predictions)):
         return float('inf')
-    
+
     mse = np.mean((predictions - y_true_vector)**2)
     return mse
 
@@ -343,10 +342,10 @@ def objective_function(params, model_func, X_matrix, y_true_vector):
 def evaluate(program_path):
     """
     Evaluate a model program on the training data.
-    
+
     Args:
         program_path: Path to the Python program containing the model
-        
+
     Returns:
         Dictionary containing evaluation metrics
     """
@@ -361,23 +360,23 @@ def evaluate(program_path):
         'optimization_success': False,
         'optimized_params': None
     }}
-    
+
     # Load training data
     try:
         X_train = np.load(X_TRAIN_EVAL_PATH)
         y_train = np.load(Y_TRAIN_EVAL_PATH)
-        
+
         if X_train.shape[1] != NUM_INPUT_FEATURES_EXPECTED:
             metrics['error_message'] = f"Loaded X_train has {{X_train.shape[1]}} features, expected {{NUM_INPUT_FEATURES_EXPECTED}}."
             return filter_and_convert_metrics(metrics)
-        
+
         if X_train.shape[0] != y_train.shape[0]:
             metrics['error_message'] = f"X_train has {{X_train.shape[0]}} samples, y_train has {{y_train.shape[0]}}."
             return filter_and_convert_metrics(metrics)
     except Exception as e:
         metrics['error_message'] = f"Failed to load training data: {{str(e)}}. Paths: X:{{X_TRAIN_EVAL_PATH}}, Y:{{Y_TRAIN_EVAL_PATH}}"
         return filter_and_convert_metrics(metrics)
-    
+
     # Load and test the model function
     func_to_eval = None
     try:
@@ -385,28 +384,28 @@ def evaluate(program_path):
         if spec is None or spec.loader is None:
             metrics['error_message'] = f"Could not create spec for module at {{program_path}}"
             return filter_and_convert_metrics(metrics)
-        
+
         model_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(model_module)
         metrics['can_run'] = 0.2
-        
+
         if not hasattr(model_module, 'run_search') or not callable(model_module.run_search):
             metrics['error_message'] = "Model program missing callable 'run_search'."
             return filter_and_convert_metrics(metrics)
-        
+
         func_to_eval = model_module.run_search()
-        
+
         if not callable(func_to_eval):
             metrics['error_message'] = "'run_search' did not return a callable function."
             return filter_and_convert_metrics(metrics)
-        
+
         # Test the function with dummy data
         num_dummy_samples = 5
         dummy_x = np.random.rand(num_dummy_samples, NUM_INPUT_FEATURES_EXPECTED)
         if NUM_INPUT_FEATURES_EXPECTED == 0:
             dummy_x = np.empty((num_dummy_samples, 0))
         dummy_params = np.random.rand(MODEL_NUM_PARAMS_EXPECTED)
-        
+
         try:
             pred_test = run_with_timeout(func_to_eval, args=(dummy_x, dummy_params), timeout_seconds=5)
             if not isinstance(pred_test, np.ndarray) or pred_test.shape != (num_dummy_samples,):
@@ -422,25 +421,25 @@ def evaluate(program_path):
             metrics['can_run'] = 0.5
             metrics['error_message'] = f"Func execution test failed: {{str(e)}} with dummy_x.shape={{dummy_x.shape}}, dummy_params.shape={{dummy_params.shape}}"
             return filter_and_convert_metrics(metrics)
-    
+
     except FileNotFoundError:
         metrics['error_message'] = f"Model program file not found: {{program_path}}"
         return filter_and_convert_metrics(metrics)
     except Exception as e:
         metrics['error_message'] = f"Failed to load or test model function: {{str(e)}}"
         return filter_and_convert_metrics(metrics)
-    
+
     if metrics['can_run'] < 1.0:
         return filter_and_convert_metrics(metrics)
-    
+
     # Optimize parameters
     initial_params = np.random.rand(MODEL_NUM_PARAMS_EXPECTED)
     optimized_params = None
-    
+
     if X_train.ndim != 2 or X_train.shape[1] != NUM_INPUT_FEATURES_EXPECTED:
         metrics['error_message'] = f"X_train shape {{X_train.shape}} is not compatible with NUM_INPUT_FEATURES_EXPECTED {{NUM_INPUT_FEATURES_EXPECTED}} for optimization."
         return filter_and_convert_metrics(metrics)
-    
+
     try:
         opt_result = minimize(
             objective_function,
@@ -448,33 +447,33 @@ def evaluate(program_path):
             args=(func_to_eval, X_train, y_train),
             method='BFGS'
         )
-        
+
         metrics['raw_mse_train'] = opt_result.fun if np.isfinite(opt_result.fun) else float('inf')
         metrics['optimization_success'] = opt_result.success
-        
+
         if opt_result.success or hasattr(opt_result, 'x'):
             optimized_params = opt_result.x
         else:
             optimized_params = initial_params
-        
+
         if not opt_result.success and metrics['error_message'] is None:
             metrics['error_message'] = f"Optimization did not converge: {{opt_result.message if hasattr(opt_result, 'message') else 'Unknown reason'}}"
-    
+
     except Exception as e:
         metrics['raw_mse_train'] = float('inf')
         metrics['error_message'] = f"Error during optimization: {{str(e)}}"
-    
+
     metrics['optimized_params'] = optimized_params.tolist() if optimized_params is not None else None
-    
+
     # Calculate final scores
     if np.isfinite(metrics['raw_mse_train']):
         metrics['negative_mse'] = -metrics['raw_mse_train']
         metrics['mse_train_score'] = -np.log10(metrics['raw_mse_train'] + 1e-9)
     else:
         metrics['mse_train_score'] = 0.0
-    
+
     metrics['combined_score'] = metrics['mse_train_score']
-    
+
     return filter_and_convert_metrics(metrics)
 
 
@@ -483,25 +482,25 @@ if __name__ == '__main__':
         print("Usage: python evaluator.py <path_to_model_program.py>")
         print("Please run the main script that calls create_program and create_evaluator first.")
         sys.exit(1)
-    
+
     program_to_evaluate = sys.argv[1]
     if not os.path.exists(program_to_evaluate):
         print(f"Error: Program file '{{program_to_evaluate}}' not found.")
         sys.exit(1)
-    
+
     print(f"Evaluating model: {{program_to_evaluate}}")
     print(f"Using NUM_INPUT_FEATURES_EXPECTED = {{NUM_INPUT_FEATURES_EXPECTED}}")
     print(f"Using MODEL_NUM_PARAMS_EXPECTED = {{MODEL_NUM_PARAMS_EXPECTED}}")
     print(f"Loading X_train from: {{X_TRAIN_EVAL_PATH}}")
     print(f"Loading y_train from: {{Y_TRAIN_EVAL_PATH}}")
-    
+
     if not os.path.exists(X_TRAIN_EVAL_PATH):
         print(f"Error: X_train data file '{{X_TRAIN_EVAL_PATH}}' not found.")
         sys.exit(1)
     if not os.path.exists(Y_TRAIN_EVAL_PATH):
         print(f"Error: y_train data file '{{Y_TRAIN_EVAL_PATH}}' not found.")
         sys.exit(1)
-    
+
     evaluation_results = evaluate(program_to_evaluate)
     print("\\nEvaluation Results:")
     for key, value in evaluation_results.items():
@@ -518,7 +517,7 @@ if __name__ == '__main__':
     return evaluator_file_path
 
 
-def create_config(problem: Dict[str, Any]) -> str:
+def create_config(problem: dict[str, Any]) -> str:
     """
     Create a YAML configuration file for the symbolic regression task.
 
@@ -695,7 +694,7 @@ def process_problem(initialized_dataset, problem_id: int, split_name: str) -> st
     except Exception as e:
         import traceback
 
-        return f"Error processing problem_id {problem_id} for split {split_name}: {str(e)}\n{traceback.format_exc()}"
+        return f"Error processing problem_id {problem_id} for split {split_name}: {e!s}\n{traceback.format_exc()}"
 
 
 def main():

@@ -1,5 +1,6 @@
 # EVOLVE-BLOCK-START
 """Advanced circle packing for n=26 circles in a unit square"""
+
 import numpy as np
 from scipy.optimize import minimize
 

@@ -67,7 +67,8 @@ def evaluate(program_path):
 
         # Use subprocess to run with timeout
         score, done, correct, total = run_with_timeout(
-            program_path, timeout_seconds=60  # Single timeout
+            program_path,
+            timeout_seconds=60,  # Single timeout
         )
 
         end_time = time.time()
@@ -90,7 +91,7 @@ def evaluate(program_path):
         }
 
     except Exception as e:
-        print(f"Evaluation failed completely: {str(e)}")
+        print(f"Evaluation failed completely: {e!s}")
         traceback.print_exc()
         return {
             "score": 0,

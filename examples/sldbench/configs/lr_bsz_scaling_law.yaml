@@ -54,7 +54,7 @@ prompt:
     def fit_scaling_law(data_points, loss_values):
         # data_points: (N,4) array with columns [lr, bsz, data_size, non_embedding_param_size]
         # loss_values: Array of corresponding lm loss values
-        # Returns: Optimized parameters 
+        # Returns: Optimized parameters
     ```
 
     Write all improvements between # EVOLVE-BLOCK-START and # EVOLVE-BLOCK-END markers.

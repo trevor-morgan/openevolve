@@ -5,11 +5,10 @@ Model ensemble for LLMs
 import asyncio
 import logging
 import random
-from typing import Dict, List, Optional, Tuple
 
+from openevolve.config import LLMModelConfig
 from openevolve.llm.base import LLMInterface
 from openevolve.llm.openai import OpenAILLM
-from openevolve.config import LLMModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +16,23 @@ logger = logging.getLogger(__name__)
 class LLMEnsemble:
     """Ensemble of LLMs"""
 
-    def __init__(self, models_cfg: List[LLMModelConfig]):
+    def __init__(self, models_cfg: list[LLMModelConfig]):
         self.models_cfg = models_cfg
 
         # Initialize models from the configuration
-        self.models = [model_cfg.init_client(model_cfg) if model_cfg.init_client else OpenAILLM(model_cfg) for model_cfg in models_cfg]
+        self.models = [
+            model_cfg.init_client(model_cfg) if model_cfg.init_client else OpenAILLM(model_cfg)
+            for model_cfg in models_cfg
+        ]
 
         # Extract and normalize model weights
         self.weights = [model.weight for model in models_cfg]
         total = sum(self.weights)
-        self.weights = [w / total for w in self.weights]
+        if total <= 0 and self.weights:
+            # Fall back to uniform weights if misconfigured
+            self.weights = [1.0 / len(self.weights)] * len(self.weights)
+        else:
+            self.weights = [w / total for w in self.weights] if total > 0 else []
 
         # Set up random state for deterministic model selection
         self.random_state = random.Random()
@@ -44,7 +50,7 @@ class LLMEnsemble:
         # Only log if we have multiple models or this is the first ensemble
         if len(models_cfg) > 1 or not hasattr(logger, "_ensemble_logged"):
             logger.info(
-                f"Initialized LLM ensemble with models: "
+                "Initialized LLM ensemble with models: "
                 + ", ".join(
                     f"{model.name} (weight: {weight:.2f})"
                     for model, weight in zip(models_cfg, self.weights)
@@ -58,7 +64,7 @@ class LLMEnsemble:
         return await model.generate(prompt, **kwargs)
 
     async def generate_with_context(
-        self, system_message: str, messages: List[Dict[str, str]], **kwargs
+        self, system_message: str, messages: list[dict[str, str]], **kwargs
     ) -> str:
         """Generate text using a system message and conversational context"""
         model = self._sample_model()
@@ -66,26 +72,33 @@ class LLMEnsemble:
 
     def _sample_model(self) -> LLMInterface:
         """Sample a model from the ensemble based on weights"""
+        if not self.models:
+            raise ValueError("LLMEnsemble has no models configured")
         index = self.random_state.choices(range(len(self.models)), weights=self.weights, k=1)[0]
         sampled_model = self.models[index]
-        logger.info(f"Sampled model: {vars(sampled_model)['model']}")
+        model_name = (
+            getattr(sampled_model, "name", None)
+            or getattr(sampled_model, "model", None)
+            or type(sampled_model).__name__
+        )
+        logger.info(f"Sampled model: {model_name}")
         return sampled_model
 
-    async def generate_multiple(self, prompt: str, n: int, **kwargs) -> List[str]:
+    async def generate_multiple(self, prompt: str, n: int, **kwargs) -> list[str]:
         """Generate multiple texts in parallel"""
         tasks = [self.generate(prompt, **kwargs) for _ in range(n)]
         return await asyncio.gather(*tasks)
 
-    async def parallel_generate(self, prompts: List[str], **kwargs) -> List[str]:
+    async def parallel_generate(self, prompts: list[str], **kwargs) -> list[str]:
         """Generate responses for multiple prompts in parallel"""
         tasks = [self.generate(prompt, **kwargs) for prompt in prompts]
         return await asyncio.gather(*tasks)
 
     async def generate_all_with_context(
-        self, system_message: str, messages: List[Dict[str, str]], **kwargs
-    ) -> str:
-        """Generate text using a all available models and average their returned metrics"""
-        responses = []
-        for model in self.models:
-            responses.append(await model.generate_with_context(system_message, messages, **kwargs))
-        return responses
+        self, system_message: str, messages: list[dict[str, str]], **kwargs
+    ) -> list[str]:
+        """Generate text using all available models in parallel."""
+        tasks = [
+            model.generate_with_context(system_message, messages, **kwargs) for model in self.models
+        ]
+        return await asyncio.gather(*tasks)

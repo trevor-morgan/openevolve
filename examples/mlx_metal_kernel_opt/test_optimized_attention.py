@@ -13,17 +13,16 @@ Usage:
     openevolve_output/best/
 """
 
+import argparse
 import os
+import subprocess
 import sys
 import time
-import argparse
-import subprocess
-import tempfile
-from typing import Optional, Dict, Any
 import traceback
+from typing import Any
 
 
-def find_best_program() -> Optional[str]:
+def find_best_program() -> str | None:
     """Find the best_program.py file in the expected location"""
     # Default location
     default_path = os.path.join(
@@ -53,14 +52,15 @@ def load_custom_attention_class(program_path: str):
 
     try:
         # Read the program
-        with open(program_path, "r") as f:
+        with open(program_path) as f:
             program_text = f.read()
 
         # Setup execution environment
+        from typing import Any, Optional
+
         import mlx.core as mx
         import mlx.nn as nn
         import numpy as np
-        from typing import Optional, Tuple, Any
 
         exec_globals = {
             "__builtins__": __builtins__,
@@ -69,7 +69,7 @@ def load_custom_attention_class(program_path: str):
             "np": np,
             "time": time,
             "Optional": Optional,
-            "Tuple": Tuple,
+            "Tuple": tuple,
             "Any": Any,
         }
 
@@ -140,7 +140,7 @@ def run_mlx_lm_generation(
     max_tokens: int = 1000,
     model: str = "mlx-community/Qwen3-0.6B-bf16",
     debug: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run mlx-lm generation and parse the output"""
     print(f"🧪 Running generation with prompt: '{prompt[:50]}...'")
 
@@ -170,7 +170,7 @@ def run_mlx_lm_generation(
         end_time = time.perf_counter()
 
         if debug:
-            print(f"📤 Command output:")
+            print("📤 Command output:")
             print(f"Return code: {result.returncode}")
             print(f"STDOUT length: {len(result.stdout)}")
             print(f"STDERR length: {len(result.stderr)}")
@@ -320,7 +320,7 @@ def run_comparison_test(
         print("   • Check if the model downloads successfully")
         return
 
-    print(f"✅ Standard Results:")
+    print("✅ Standard Results:")
     print(f"   Decode Speed: {standard_result['generation_speed']:.1f} tokens/sec")
     print(f"   Memory Usage: {standard_result['peak_memory']:.2f} GB")
     print(f"   Total Time: {standard_result['total_time']:.2f} seconds")
@@ -360,7 +360,7 @@ def run_comparison_test(
                 print(f"   Error: {optimized_result['error']}")
             return
 
-        print(f"✅ Optimized Results:")
+        print("✅ Optimized Results:")
         print(f"   Decode Speed: {optimized_result['generation_speed']:.1f} tokens/sec")
         print(f"   Memory Usage: {optimized_result['peak_memory']:.2f} GB")
         print(f"   Total Time: {optimized_result['total_time']:.2f} seconds")
@@ -386,7 +386,7 @@ def run_comparison_test(
         else:
             time_improvement = 0.0
 
-        print(f"\n🚀 PERFORMANCE COMPARISON:")
+        print("\n🚀 PERFORMANCE COMPARISON:")
         if standard_result["generation_speed"] > 0:
             print(f"   Speed Improvement: {speed_improvement:+.1f}%")
         else:
@@ -406,7 +406,7 @@ def run_comparison_test(
             print("⚠️  No improvement or regression")
 
         # Show generated text comparison
-        print(f"\n📝 GENERATED TEXT COMPARISON:")
+        print("\n📝 GENERATED TEXT COMPARISON:")
         std_text = (
             standard_result["generated_text"][:200]
             if standard_result["generated_text"]

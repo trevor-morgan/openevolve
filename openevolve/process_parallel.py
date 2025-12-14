@@ -5,34 +5,44 @@ Process-based parallel controller for true parallelism
 import asyncio
 import logging
 import multiprocessing as mp
-import pickle
-import signal
+import threading
 import time
-from concurrent.futures import Future, ProcessPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures import (
+    Executor,
+    Future,
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    TimeoutError as FutureTimeoutError,
+)
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from openevolve.config import Config
 from openevolve.database import Program, ProgramDatabase
-from openevolve.utils.metrics_utils import safe_numeric_average
+from openevolve.utils.metrics_utils import get_fitness_score, safe_numeric_average
 
 logger = logging.getLogger(__name__)
+
+_worker_thread_local = threading.local()
 
 
 @dataclass
 class SerializableResult:
     """Result that can be pickled and sent between processes"""
 
-    child_program_dict: Optional[Dict[str, Any]] = None
-    parent_id: Optional[str] = None
+    child_program_dict: dict[str, Any] | None = None
+    parent_id: str | None = None
     iteration_time: float = 0.0
-    prompt: Optional[Dict[str, str]] = None
-    llm_response: Optional[str] = None
-    artifacts: Optional[Dict[str, Any]] = None
+    prompt: dict[str, str] | None = None
+    llm_response: str | None = None
+    artifacts: dict[str, Any] | None = None
     iteration: int = 0
-    error: Optional[str] = None
+    error: str | None = None
+    # Meta-prompting attribution (captured in worker, rewarded in main)
+    meta_prompt_strategy: str | None = None
+    meta_prompt_context: dict[str, Any] | None = None
+    meta_prompt_island: int | None = None
 
 
 def _worker_init(config_dict: dict, evaluation_file: str, parent_env: dict = None) -> None:
@@ -45,158 +55,113 @@ def _worker_init(config_dict: dict, evaluation_file: str, parent_env: dict = Non
 
     global _worker_config
     global _worker_evaluation_file
-    global _worker_evaluator
-    global _worker_llm_ensemble
-    global _worker_prompt_sampler
-
     # Store config for later use
-    # Reconstruct Config object from nested dictionaries
-    from openevolve.config import (
-        Config,
-        DatabaseConfig,
-        EvaluatorConfig,
-        LLMConfig,
-        LLMModelConfig,
-        PromptConfig,
-    )
-
-    # Reconstruct model objects
-    models = [LLMModelConfig(**m) for m in config_dict["llm"]["models"]]
-    evaluator_models = [LLMModelConfig(**m) for m in config_dict["llm"]["evaluator_models"]]
-
-    # Create LLM config with models
-    llm_dict = config_dict["llm"].copy()
-    llm_dict["models"] = models
-    llm_dict["evaluator_models"] = evaluator_models
-    llm_config = LLMConfig(**llm_dict)
-
-    # Create other configs
-    prompt_config = PromptConfig(**config_dict["prompt"])
-    database_config = DatabaseConfig(**config_dict["database"])
-    evaluator_config = EvaluatorConfig(**config_dict["evaluator"])
-
-    _worker_config = Config(
-        llm=llm_config,
-        prompt=prompt_config,
-        database=database_config,
-        evaluator=evaluator_config,
-        **{
-            k: v
-            for k, v in config_dict.items()
-            if k not in ["llm", "prompt", "database", "evaluator"]
-        },
-    )
+    _worker_config = Config.from_worker_dict(config_dict)
     _worker_evaluation_file = evaluation_file
 
-    # These will be lazily initialized on first use
-    _worker_evaluator = None
-    _worker_llm_ensemble = None
-    _worker_prompt_sampler = None
+    # Clear any cached thread-local components for this worker/thread.
+    try:
+        del _worker_thread_local.components
+    except AttributeError:
+        pass
 
 
 def _lazy_init_worker_components():
-    """Lazily initialize expensive components on first use"""
-    global _worker_evaluator
-    global _worker_llm_ensemble
-    global _worker_prompt_sampler
+    """Lazily initialize expensive components on first use (thread-safe)."""
+    components = getattr(_worker_thread_local, "components", None)
+    if components is not None:
+        return components
 
-    if _worker_llm_ensemble is None:
-        from openevolve.llm.ensemble import LLMEnsemble
+    from openevolve.config import EvaluatorConfig
+    from openevolve.evaluator import Evaluator
+    from openevolve.llm.ensemble import LLMEnsemble
+    from openevolve.prompt.sampler import PromptSampler
 
-        _worker_llm_ensemble = LLMEnsemble(_worker_config.llm.models)
+    llm_ensemble = LLMEnsemble(_worker_config.llm.models)
+    prompt_sampler = PromptSampler(_worker_config.prompt)
 
-    if _worker_prompt_sampler is None:
-        from openevolve.prompt.sampler import PromptSampler
+    # Create evaluator-specific components
+    evaluator_llm = LLMEnsemble(_worker_config.llm.evaluator_models)
+    evaluator_prompt = PromptSampler(_worker_config.prompt)
+    evaluator_prompt.set_templates("evaluator_system_message")
 
-        _worker_prompt_sampler = PromptSampler(_worker_config.prompt)
+    # Copy evaluator config per thread to avoid cross-thread mutation and
+    # allow per-iteration runtime overrides (e.g., timeout hot reload).
+    evaluator_cfg = EvaluatorConfig(**asdict(_worker_config.evaluator))
+    evaluator = Evaluator(
+        evaluator_cfg,
+        _worker_evaluation_file,
+        evaluator_llm,
+        evaluator_prompt,
+        database=None,  # No shared database in worker
+        suffix=getattr(_worker_config, "file_suffix", ".py"),
+    )
 
-    if _worker_evaluator is None:
-        from openevolve.evaluator import Evaluator
-        from openevolve.llm.ensemble import LLMEnsemble
-        from openevolve.prompt.sampler import PromptSampler
-
-        # Create evaluator-specific components
-        evaluator_llm = LLMEnsemble(_worker_config.llm.evaluator_models)
-        evaluator_prompt = PromptSampler(_worker_config.prompt)
-        evaluator_prompt.set_templates("evaluator_system_message")
-
-        _worker_evaluator = Evaluator(
-            _worker_config.evaluator,
-            _worker_evaluation_file,
-            evaluator_llm,
-            evaluator_prompt,
-            database=None,  # No shared database in worker
-            suffix=getattr(_worker_config, "file_suffix", ".py"),
-        )
+    components = (evaluator, llm_ensemble, prompt_sampler)
+    _worker_thread_local.components = components
+    return components
 
 
-def _run_iteration_worker(
-    iteration: int, db_snapshot: Dict[str, Any], parent_id: str, inspiration_ids: List[str]
-) -> SerializableResult:
+def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> SerializableResult:
     """Run a single iteration in a worker process"""
     try:
-        # Lazy initialization
-        _lazy_init_worker_components()
+        evaluator, llm_ensemble, prompt_sampler = _lazy_init_worker_components()
 
-        # Reconstruct programs from snapshot
-        programs = {pid: Program(**prog_dict) for pid, prog_dict in db_snapshot["programs"].items()}
+        runtime_overrides = snapshot.get("runtime_overrides") or {}
+        try:
+            evaluator_timeout = runtime_overrides.get("evaluator_timeout")
+            if isinstance(evaluator_timeout, (int, float)) and float(evaluator_timeout) > 0:
+                evaluator.config.timeout = int(evaluator_timeout)
+        except Exception:
+            pass
 
-        parent = programs[parent_id]
-        inspirations = [programs[pid] for pid in inspiration_ids if pid in programs]
+        parent = Program(**snapshot["parent"])
+        inspirations = snapshot.get("inspirations", [])
+        top_programs = snapshot.get("top_programs", [])
+        previous_programs = snapshot.get("previous_programs", [])
 
-        # Get parent artifacts if available
-        parent_artifacts = db_snapshot["artifacts"].get(parent_id)
+        # Parent artifacts if available
+        parent_artifacts = snapshot.get("program_artifacts")
 
-        # Get island-specific programs for context
-        parent_island = parent.metadata.get("island", db_snapshot["current_island"])
-        island_programs = [
-            programs[pid] for pid in db_snapshot["islands"][parent_island] if pid in programs
-        ]
-
-        # Sort by metrics for top programs
-        island_programs.sort(
-            key=lambda p: p.metrics.get("combined_score", safe_numeric_average(p.metrics)),
-            reverse=True,
-        )
-
-        # Use config values for limits instead of hardcoding
-        # Programs for LLM display (includes both top and diverse for inspiration)
-        programs_for_prompt = island_programs[
-            : _worker_config.prompt.num_top_programs + _worker_config.prompt.num_diverse_programs
-        ]
-        # Best programs only (for previous attempts section, focused on top performers)
-        best_programs_only = island_programs[: _worker_config.prompt.num_top_programs]
+        parent_island = parent.metadata.get("island", snapshot.get("island_idx", 0))
 
         # Build prompt (with discovery mode support)
-        prompt = _worker_prompt_sampler.build_prompt(
+        prompt = prompt_sampler.build_prompt(
             current_program=parent.code,
             parent_program=parent.code,
             program_metrics=parent.metrics,
-            previous_programs=[p.to_dict() for p in best_programs_only],
-            top_programs=[p.to_dict() for p in programs_for_prompt],
-            inspirations=[p.to_dict() for p in inspirations],
+            previous_programs=previous_programs,
+            top_programs=top_programs,
+            inspirations=inspirations,
             language=_worker_config.language,
             evolution_round=iteration,
             diff_based_evolution=_worker_config.diff_based_evolution,
             program_artifacts=parent_artifacts,
-            feature_dimensions=db_snapshot.get("feature_dimensions", []),
-            problem_context=db_snapshot.get("problem_context"),
-            discovery_mode=db_snapshot.get("discovery_mode", False),
+            feature_dimensions=snapshot.get("feature_dimensions", []),
+            problem_context=snapshot.get("problem_context"),
+            discovery_mode=snapshot.get("discovery_mode", False),
+            island_idx=parent_island,
+            generation=parent.generation,
         )
+
+        # Capture meta-prompt strategy selection for main-process reward attribution
+        meta_strategy = getattr(prompt_sampler, "_last_strategy_name", None)
+        meta_context = getattr(prompt_sampler, "_last_strategy_context", None)
+        meta_island = getattr(prompt_sampler, "_last_island_idx", None)
 
         iteration_start = time.time()
 
         # Generate code modification (sync wrapper for async)
         try:
             llm_response = asyncio.run(
-                _worker_llm_ensemble.generate_with_context(
+                llm_ensemble.generate_with_context(
                     system_message=prompt["system"],
                     messages=[{"role": "user", "content": prompt["user"]}],
                 )
             )
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-            return SerializableResult(error=f"LLM generation failed: {str(e)}", iteration=iteration)
+            return SerializableResult(error=f"LLM generation failed: {e!s}", iteration=iteration)
 
         # Check for None response
         if llm_response is None:
@@ -209,7 +174,7 @@ def _run_iteration_worker(
             diff_blocks = extract_diffs(llm_response)
             if not diff_blocks:
                 return SerializableResult(
-                    error=f"No valid diffs found in response", iteration=iteration
+                    error="No valid diffs found in response", iteration=iteration
                 )
 
             child_code = apply_diff(parent.code, llm_response)
@@ -220,7 +185,7 @@ def _run_iteration_worker(
             new_code = parse_full_rewrite(llm_response, _worker_config.language)
             if not new_code:
                 return SerializableResult(
-                    error=f"No valid code found in response", iteration=iteration
+                    error="No valid code found in response", iteration=iteration
                 )
 
             child_code = new_code
@@ -237,10 +202,38 @@ def _run_iteration_worker(
         import uuid
 
         child_id = str(uuid.uuid4())
-        child_metrics = asyncio.run(_worker_evaluator.evaluate_program(child_code, child_id))
+        problem_context = snapshot.get("problem_context")
+        max_stage = snapshot.get("max_evaluation_stage")
+        if problem_context:
+            child_metrics = asyncio.run(
+                evaluator.evaluate_program(
+                    child_code,
+                    child_id,
+                    problem_context=problem_context,
+                    max_stage=max_stage,
+                )
+            )
+        else:
+            child_metrics = asyncio.run(
+                evaluator.evaluate_program(child_code, child_id, max_stage=max_stage)
+            )
 
         # Get artifacts
-        artifacts = _worker_evaluator.get_pending_artifacts(child_id)
+        artifacts = evaluator.get_pending_artifacts(child_id)
+
+        # Update worker-local meta-prompting statistics for within-run learning
+        if meta_strategy and getattr(prompt_sampler, "meta_prompt_evolver", None):
+            try:
+                feature_dims = snapshot.get("feature_dimensions", [])
+                parent_fitness = get_fitness_score(parent.metrics, feature_dims)
+                child_fitness = get_fitness_score(child_metrics, feature_dims)
+                prompt_sampler.report_outcome(
+                    parent_fitness=parent_fitness,
+                    child_fitness=child_fitness,
+                    island_idx=parent_island,
+                )
+            except Exception as e:
+                logger.warning(f"Worker meta-prompt update failed: {e}")
 
         # Create child program
         child_program = Program(
@@ -255,6 +248,7 @@ def _run_iteration_worker(
                 "changes": changes_summary,
                 "parent_metrics": parent.metrics,
                 "island": parent_island,
+                "problem_id": snapshot.get("problem_id"),
             },
         )
 
@@ -268,6 +262,9 @@ def _run_iteration_worker(
             llm_response=llm_response,
             artifacts=artifacts,
             iteration=iteration,
+            meta_prompt_strategy=meta_strategy,
+            meta_prompt_context=meta_context,
+            meta_prompt_island=meta_island,
         )
 
     except Exception as e:
@@ -284,17 +281,43 @@ class ProcessParallelController:
         evaluation_file: str,
         database: ProgramDatabase,
         evolution_tracer=None,
+        prompt_sampler=None,
+        discovery_engine=None,
         file_suffix: str = ".py",
+        config_path: str | None = None,
+        hot_reload: bool = False,
+        hot_reload_interval: float = 2.0,
     ):
         self.config = config
         self.evaluation_file = evaluation_file
         self.database = database
         self.evolution_tracer = evolution_tracer
+        self.prompt_sampler = prompt_sampler
+        self.discovery_engine = discovery_engine
         self.file_suffix = file_suffix
+        self.config_path = config_path
+        self.hot_reload_enabled = bool(hot_reload) and bool(config_path)
+        self.hot_reload_interval = float(hot_reload_interval)
+        self._hot_last_check: float = 0.0
+        self._hot_last_mtime: float | None = None
 
-        self.executor: Optional[ProcessPoolExecutor] = None
+        # Track last problem generation for single-problem discovery context updates.
+        self._last_problem_generation: int = 0
+        if self.discovery_engine is not None:
+            current_problem = getattr(self.discovery_engine, "current_problem", None)
+            if current_problem is not None:
+                try:
+                    self._last_problem_generation = int(current_problem.generation)
+                except Exception:
+                    self._last_problem_generation = 0
+
+        self.executor: Executor | None = None
+        self.executor_mode: str | None = None
         self.shutdown_event = mp.Event()
         self.early_stopping_triggered = False
+
+        # Track RL selections per iteration for safe parallel attribution
+        self._rl_selections: dict[int, dict[str, Any]] = {}
 
         # Number of worker processes
         self.num_workers = config.evaluator.parallel_evaluations
@@ -302,45 +325,91 @@ class ProcessParallelController:
 
         logger.info(f"Initialized process parallel controller with {self.num_workers} workers")
 
-    def _serialize_config(self, config: Config) -> dict:
-        """Serialize config object to a dictionary that can be pickled"""
-        # Manual serialization to handle nested objects properly
+    def _maybe_hot_reload_config(self) -> None:
+        """Hot-reload a small set of config knobs from config_path during a run.
 
-        # The asdict() call itself triggers the deepcopy which tries to serialize novelty_llm. Remove it first.
-        config.database.novelty_llm = None
+        This is intentionally conservative: it only applies settings that are safe
+        to change mid-run (timeouts and skeptic budget knobs).
+        """
+        if not self.hot_reload_enabled or not self.config_path:
+            return
 
-        return {
-            "llm": {
-                "models": [asdict(m) for m in config.llm.models],
-                "evaluator_models": [asdict(m) for m in config.llm.evaluator_models],
-                "api_base": config.llm.api_base,
-                "api_key": config.llm.api_key,
-                "temperature": config.llm.temperature,
-                "top_p": config.llm.top_p,
-                "max_tokens": config.llm.max_tokens,
-                "timeout": config.llm.timeout,
-                "retries": config.llm.retries,
-                "retry_delay": config.llm.retry_delay,
-            },
-            "prompt": asdict(config.prompt),
-            "database": asdict(config.database),
-            "evaluator": asdict(config.evaluator),
-            "max_iterations": config.max_iterations,
-            "checkpoint_interval": config.checkpoint_interval,
-            "log_level": config.log_level,
-            "log_dir": config.log_dir,
-            "random_seed": config.random_seed,
-            "diff_based_evolution": config.diff_based_evolution,
-            "max_code_length": config.max_code_length,
-            "language": config.language,
-            "file_suffix": self.file_suffix,
-        }
+        now = time.time()
+        if now - self._hot_last_check < self.hot_reload_interval:
+            return
+        self._hot_last_check = now
+
+        try:
+            import os
+
+            mtime = os.path.getmtime(self.config_path)
+        except OSError:
+            return
+
+        if self._hot_last_mtime is not None and mtime <= self._hot_last_mtime:
+            return
+        self._hot_last_mtime = mtime
+
+        try:
+            import yaml
+
+            raw = Path(self.config_path).read_text(encoding="utf-8")
+            cfg = yaml.safe_load(raw) or {}
+        except Exception as e:
+            logger.warning(f"Hot-reload skipped (failed to read {self.config_path}): {e}")
+            return
+
+        changed: list[str] = []
+
+        # evaluator.timeout (affects worker-side asyncio timeouts and main future wait buffer).
+        try:
+            new_eval_timeout = cfg.get("evaluator", {}).get("timeout")
+            if isinstance(new_eval_timeout, (int, float)):
+                new_eval_timeout_i = int(new_eval_timeout)
+                if new_eval_timeout_i > 0 and new_eval_timeout_i != int(
+                    self.config.evaluator.timeout
+                ):
+                    old = self.config.evaluator.timeout
+                    self.config.evaluator.timeout = new_eval_timeout_i
+                    changed.append(f"evaluator.timeout {old} -> {new_eval_timeout_i}")
+        except Exception:
+            pass
+
+        # discovery.skeptic.attack_timeout / num_attack_rounds.
+        try:
+            disc = cfg.get("discovery", {}) or {}
+            sk = disc.get("skeptic", {}) or {}
+            new_attack_timeout = sk.get("attack_timeout")
+            if isinstance(new_attack_timeout, (int, float)):
+                new_attack_timeout_f = float(new_attack_timeout)
+                if new_attack_timeout_f > 0 and new_attack_timeout_f != float(
+                    self.config.discovery.skeptic.attack_timeout
+                ):
+                    old = self.config.discovery.skeptic.attack_timeout
+                    self.config.discovery.skeptic.attack_timeout = new_attack_timeout_f
+                    changed.append(
+                        f"discovery.skeptic.attack_timeout {old} -> {new_attack_timeout_f}"
+                    )
+
+            new_rounds = sk.get("num_attack_rounds")
+            if (
+                isinstance(new_rounds, int)
+                and new_rounds >= 0
+                and new_rounds != int(self.config.discovery.skeptic.num_attack_rounds)
+            ):
+                old = self.config.discovery.skeptic.num_attack_rounds
+                self.config.discovery.skeptic.num_attack_rounds = int(new_rounds)
+                changed.append(f"discovery.skeptic.num_attack_rounds {old} -> {new_rounds}")
+        except Exception:
+            pass
+
+        if changed:
+            logger.info(f"Hot-reloaded config ({self.config_path}): {', '.join(changed)}")
 
     def start(self) -> None:
         """Start the process pool"""
         # Convert config to dict for pickling
-        # We need to be careful with nested dataclasses
-        config_dict = self._serialize_config(self.config)
+        config_dict = self.config.to_worker_dict()
 
         # Pass current environment to worker processes
         import os
@@ -357,15 +426,32 @@ class ProcessParallelController:
             logger.info(f"Set max {self.config.max_tasks_per_child} tasks per child")
             executor_kwargs["max_tasks_per_child"] = self.config.max_tasks_per_child
         elif self.config.max_tasks_per_child is not None:
-            logger.warn(
+            logger.warning(
                 "max_tasks_per_child is only supported in Python 3.11+. "
                 "Ignoring max_tasks_per_child and using spawn start method."
             )
             executor_kwargs["mp_context"] = mp.get_context("spawn")
 
-        # Create process pool with initializer
-        self.executor = ProcessPoolExecutor(**executor_kwargs)
-        logger.info(f"Started process pool with {self.num_workers} processes")
+        # Create process pool with initializer (fallback to threads on restricted systems).
+        try:
+            self.executor = ProcessPoolExecutor(**executor_kwargs)
+            self.executor_mode = "process"
+            logger.info(f"Started process pool with {self.num_workers} processes")
+            return
+        except (PermissionError, OSError) as e:
+            logger.warning(
+                f"Process pool creation failed ({type(e).__name__}: {e}). "
+                "Falling back to ThreadPoolExecutor."
+            )
+
+        thread_kwargs = {
+            "max_workers": self.num_workers,
+            "initializer": _worker_init,
+            "initargs": (config_dict, self.evaluation_file, current_env),
+        }
+        self.executor = ThreadPoolExecutor(**thread_kwargs)
+        self.executor_mode = "thread"
+        logger.info(f"Started thread pool with {self.num_workers} workers")
 
     def stop(self) -> None:
         """Stop the process pool"""
@@ -386,39 +472,136 @@ class ProcessParallelController:
         """Set the current problem context for discovery mode"""
         self._problem_context = problem_context
 
-    def _create_database_snapshot(self) -> Dict[str, Any]:
-        """Create a serializable snapshot of the database state"""
-        # Only include necessary data for workers
-        snapshot = {
-            "programs": {pid: prog.to_dict() for pid, prog in self.database.programs.items()},
-            "islands": [list(island) for island in self.database.islands],
-            "current_island": self.database.current_island,
+    def _create_iteration_snapshot(
+        self,
+        parent: Program,
+        inspirations: list[Program],
+        island_idx: int,
+    ) -> dict[str, Any]:
+        """Create a lightweight snapshot for a single worker iteration."""
+        # Top programs for prompt context
+        num_top = self.config.prompt.num_top_programs
+        num_diverse = self.config.prompt.num_diverse_programs
+        top_programs = self.database.get_top_programs(num_top, island_idx=island_idx)
+
+        # Diverse elites sampled from different MAP-Elites cells
+        exclude_ids = {parent.id}.union(p.id for p in top_programs)
+        diverse_programs = self.database.get_diverse_programs(
+            num_diverse, island_idx=island_idx, exclude_ids=exclude_ids
+        )
+
+        programs_for_prompt = top_programs + diverse_programs
+
+        parent_artifacts = self.database.get_artifacts(parent.id)
+
+        # Discovery mode: add curiosity samples as extra inspirations
+        if (
+            self.discovery_engine is not None
+            and self.config.discovery.enabled
+            and self.config.discovery.curiosity_sampling_enabled
+        ):
+            try:
+                curiosity = self.discovery_engine.get_curiosity_samples(
+                    n=self.config.prompt.num_diverse_programs
+                )
+                # Filter to same island to preserve isolation
+                existing_ids = {p.id for p in inspirations}
+                limit = (
+                    self.config.prompt.num_top_programs + self.config.prompt.num_diverse_programs
+                )
+                for prog in curiosity:
+                    if (
+                        prog.id != parent.id
+                        and prog.id not in existing_ids
+                        and prog.metadata.get("island") == island_idx
+                    ):
+                        inspirations.append(prog)
+                        existing_ids.add(prog.id)
+                        if len(inspirations) >= limit:
+                            break
+            except Exception as e:
+                logger.debug(f"Curiosity sampling failed: {e}")
+
+        # Per-island problem context (coevolution mode) if available.
+        problem_context = getattr(self, "_problem_context", None)
+        problem_id = None
+        if self.discovery_engine is not None:
+            try:
+                if hasattr(self.discovery_engine, "get_problem_context_for_island"):
+                    problem_context = self.discovery_engine.get_problem_context_for_island(
+                        island_idx
+                    )
+                if hasattr(self.discovery_engine, "get_problem_id_for_island"):
+                    problem_id = self.discovery_engine.get_problem_id_for_island(island_idx)
+            except Exception as e:
+                logger.debug(f"Problem context lookup failed: {e}")
+
+        # Compute-budgeted cascade: cap max evaluation stage for workers based on parent fitness.
+        max_eval_stage = None
+        if getattr(self.config.evaluator, "budgeted_cascade_enabled", False):
+            try:
+                parent_fitness = get_fitness_score(
+                    parent.metrics, self.database.config.feature_dimensions
+                )
+                threshold = getattr(self.config.evaluator, "budget_stage3_parent_threshold", 0.6)
+                if parent_fitness >= threshold:
+                    max_eval_stage = int(getattr(self.config.evaluator, "budget_max_stage_high", 3))
+                else:
+                    max_eval_stage = int(getattr(self.config.evaluator, "budget_max_stage_low", 2))
+
+                # If discovery is enabled, allocate more compute to high-surprise areas.
+                if (
+                    self.discovery_engine is not None
+                    and getattr(self.config, "discovery", None)
+                    and self.config.discovery.surprise_tracking_enabled
+                ):
+                    try:
+                        predicted = self.discovery_engine.archive.predict_fitness(parent.code)
+                        surprise = abs(parent_fitness - float(predicted))
+                        if surprise > float(self.config.discovery.surprise_bonus_threshold):
+                            max_eval_stage = int(
+                                getattr(
+                                    self.config.evaluator, "budget_max_stage_high", max_eval_stage
+                                )
+                            )
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Budgeted cascade selection failed: {e}")
+            else:
+                try:
+                    logger.debug(
+                        f"Budgeted cascade: island={island_idx}, parent={parent.id}, "
+                        f"fitness={parent_fitness:.3f}, threshold={threshold:.3f} -> "
+                        f"max_stage={max_eval_stage}"
+                    )
+                except Exception:
+                    pass
+
+        return {
+            "parent": parent.to_dict(),
+            "inspirations": [p.to_dict() for p in inspirations],
+            "top_programs": [p.to_dict() for p in programs_for_prompt],
+            "previous_programs": [p.to_dict() for p in top_programs],
             "feature_dimensions": self.database.config.feature_dimensions,
-            "artifacts": {},  # Will be populated selectively
-            # Discovery mode context
-            "problem_context": getattr(self, '_problem_context', None),
-            "discovery_mode": self.config.discovery.enabled if hasattr(self.config, 'discovery') else False,
+            "program_artifacts": parent_artifacts,
+            "problem_context": problem_context,
+            "problem_id": problem_id,
+            "discovery_mode": self.config.discovery.enabled
+            if hasattr(self.config, "discovery")
+            else False,
+            "island_idx": island_idx,
+            "max_evaluation_stage": max_eval_stage,
+            "runtime_overrides": {
+                "evaluator_timeout": int(getattr(self.config.evaluator, "timeout", 0) or 0),
+            },
         }
-
-        # Include artifacts for programs that might be selected
-        # IMPORTANT: This limits artifacts (execution outputs/errors) to first 100 programs only.
-        # This does NOT affect program code - all programs are fully serialized above.
-        # With max_artifact_bytes=20KB and population_size=1000, artifacts could be 20MB total,
-        # which would significantly slow worker process initialization. The limit of 100 keeps
-        # artifact data under 2MB while still providing execution context for recent programs.
-        # Workers can still evolve properly as they have access to ALL program code.
-        for pid in list(self.database.programs.keys())[:100]:
-            artifacts = self.database.get_artifacts(pid)
-            if artifacts:
-                snapshot["artifacts"][pid] = artifacts
-
-        return snapshot
 
     async def run_evolution(
         self,
         start_iteration: int,
         max_iterations: int,
-        target_score: Optional[float] = None,
+        target_score: float | None = None,
         checkpoint_callback=None,
         program_callback=None,
     ):
@@ -443,8 +626,8 @@ class ProcessParallelController:
         )
 
         # Track pending futures by island to maintain distribution
-        pending_futures: Dict[int, Future] = {}
-        island_pending: Dict[int, List[int]] = {i: [] for i in range(self.num_islands)}
+        pending_futures: dict[int, Future] = {}
+        island_pending: dict[int, list[int]] = {i: [] for i in range(self.num_islands)}
         batch_size = min(self.num_workers * 2, max_iterations)
 
         # Submit initial batch - distribute across islands
@@ -514,15 +697,151 @@ class ProcessParallelController:
                     # Reconstruct program from dict
                     child_program = Program(**result.child_program_dict)
 
-                    # Add to database (will auto-inherit parent's island)
-                    # No need to specify target_island - database will handle parent island inheritance
-                    self.database.add(child_program, iteration=completed_iteration)
-
-                    # Store artifacts
+                    # Attach artifacts early so discovery/Heisenberg can see them
                     if result.artifacts:
-                        self.database.store_artifacts(child_program.id, result.artifacts)
+                        if child_program.metadata is None:
+                            child_program.metadata = {}
+                        # Keep a copy in metadata for downstream consumers
+                        child_program.metadata.setdefault("artifacts", result.artifacts)
 
-                    # Call program callback if provided (used by Discovery Engine)
+                    # Discovery mode pre-admission processing:
+                    # Run skeptic/falsification BEFORE admitting to the database.
+                    discovery_metadata: dict[str, Any] | None = None
+                    falsification_passed = True
+                    is_solution = False
+                    if (
+                        self.discovery_engine is not None
+                        and hasattr(self.config, "discovery")
+                        and self.config.discovery.enabled
+                    ):
+                        try:
+                            (
+                                is_solution,
+                                discovery_metadata,
+                            ) = await self.discovery_engine.process_program(child_program)
+                            falsification_passed = discovery_metadata.get(
+                                "falsification_passed", True
+                            )
+
+                            # Persist a compact discovery summary on admitted programs for debugging.
+                            if falsification_passed and discovery_metadata:
+                                if child_program.metadata is None:
+                                    child_program.metadata = {}
+                                existing = child_program.metadata.get("discovery")
+                                discovery_summary = existing if isinstance(existing, dict) else {}
+                                for k in (
+                                    "problem_id",
+                                    "falsification_passed",
+                                    "surprise_score",
+                                    "is_positive_surprise",
+                                    "is_solution",
+                                ):
+                                    if k in discovery_metadata:
+                                        discovery_summary[k] = discovery_metadata[k]
+                                try:
+                                    fr = discovery_metadata.get("falsification_results")
+                                    if isinstance(fr, list) and fr:
+                                        discovery_summary["falsification_attack_types"] = [
+                                            r.get("attack_type") for r in fr if isinstance(r, dict)
+                                        ][:10]
+                                except Exception:
+                                    pass
+                                child_program.metadata["discovery"] = discovery_summary
+
+                            # In single-problem discovery mode, refresh problem context
+                            # for future worker prompts when a new generation appears.
+                            if (
+                                falsification_passed
+                                and is_solution
+                                and getattr(self.discovery_engine, "problem_archive", None) is None
+                            ):
+                                current_problem = getattr(
+                                    self.discovery_engine, "current_problem", None
+                                )
+                                if current_problem is not None:
+                                    try:
+                                        current_gen = int(current_problem.generation)
+                                    except Exception:
+                                        current_gen = self._last_problem_generation
+                                    if current_gen > self._last_problem_generation:
+                                        self._last_problem_generation = current_gen
+                                        self.set_problem_context(
+                                            self.discovery_engine.get_current_problem_context()
+                                        )
+                                        logger.info(
+                                            f"PROBLEM EVOLVED to generation {current_gen} "
+                                            f"(difficulty: {getattr(current_problem, 'difficulty_level', 0.0):.1f})"
+                                        )
+                        except Exception as e:
+                            logger.warning(f"Discovery processing failed: {e}")
+                            falsification_passed = True
+
+                    if falsification_passed:
+                        # Admit to database if discovery engine didn't already add it
+                        if child_program.id not in self.database.programs:
+                            # Add to database (will auto-inherit parent's island)
+                            self.database.add(child_program, iteration=completed_iteration)
+
+                        # Store artifacts after admission
+                        if result.artifacts:
+                            self.database.store_artifacts(child_program.id, result.artifacts)
+                    else:
+                        logger.info(
+                            f"Program {child_program.id} FALSIFIED - not admitted to database"
+                        )
+
+                    # Meta-prompting reward attribution (parallel-safe)
+                    if (
+                        self.prompt_sampler is not None
+                        and getattr(result, "meta_prompt_strategy", None)
+                        and getattr(self.prompt_sampler, "meta_prompt_evolver", None)
+                    ):
+                        parent_program = (
+                            self.database.get(result.parent_id) if result.parent_id else None
+                        )
+                        if parent_program:
+                            feature_dims = self.database.config.feature_dimensions
+                            parent_fitness = get_fitness_score(parent_program.metrics, feature_dims)
+                            # Penalize falsified children by zeroing fitness
+                            raw_child_fitness = get_fitness_score(
+                                child_program.metrics, feature_dims
+                            )
+                            child_fitness = raw_child_fitness if falsification_passed else 0.0
+                            try:
+                                self.prompt_sampler.report_explicit_outcome(
+                                    strategy_name=result.meta_prompt_strategy,
+                                    parent_fitness=parent_fitness,
+                                    child_fitness=child_fitness,
+                                    island_idx=result.meta_prompt_island
+                                    or child_program.metadata.get(
+                                        "island", self.database.current_island
+                                    ),
+                                    context=result.meta_prompt_context,
+                                )
+                            except Exception as e:
+                                logger.warning(f"Meta-prompt reward attribution failed: {e}")
+
+                    # RL reward attribution (parallel-safe)
+                    rl_info = self._rl_selections.pop(completed_iteration, None)
+                    if rl_info and self.database.rl_policy and self.database.rl_policy.enabled:
+                        try:
+                            feature_dims = self.database.config.feature_dimensions
+                            raw_child_fitness = get_fitness_score(
+                                child_program.metrics, feature_dims
+                            )
+                            child_fitness = raw_child_fitness if falsification_passed else 0.0
+                            rl_policy = self.database.rl_policy
+                            rl_policy.last_action = rl_info["action"]
+                            rl_policy.last_state = rl_info["state"]
+                            rl_policy.report_outcome(
+                                parent_fitness=rl_info["parent_fitness"],
+                                child_fitness=child_fitness,
+                                island_idx=rl_info["island_idx"],
+                            )
+                        except Exception as e:
+                            logger.warning(f"RL outcome report failed: {e}")
+
+                    # Call user program callback if provided (not used for discovery now)
                     if program_callback is not None:
                         try:
                             await program_callback(child_program)
@@ -744,11 +1063,11 @@ class ProcessParallelController:
 
         return self.database.get_best_program()
 
-    def _submit_iteration(
-        self, iteration: int, island_id: Optional[int] = None
-    ) -> Optional[Future]:
+    def _submit_iteration(self, iteration: int, island_id: int | None = None) -> Future | None:
         """Submit an iteration to the process pool, optionally pinned to a specific island"""
         try:
+            self._maybe_hot_reload_config()
+
             # Use specified island or current island
             target_island = island_id if island_id is not None else self.database.current_island
 
@@ -758,18 +1077,27 @@ class ProcessParallelController:
                 island_id=target_island, num_inspirations=self.config.prompt.num_top_programs
             )
 
-            # Create database snapshot
-            db_snapshot = self._create_database_snapshot()
-            db_snapshot["sampling_island"] = target_island  # Mark which island this is for
+            # Capture RL selection info for this iteration if RL is enabled and used
+            if (
+                self.database.rl_policy
+                and self.database.rl_policy.enabled
+                and getattr(self.database, "_last_rl_action", None) is not None
+            ):
+                import copy
+
+                feature_dims = self.database.config.feature_dimensions
+                self._rl_selections[iteration] = {
+                    "action": self.database.rl_policy.last_action,
+                    "state": copy.deepcopy(self.database.rl_policy.last_state),
+                    "parent_fitness": get_fitness_score(parent.metrics, feature_dims),
+                    "island_idx": target_island,
+                }
+
+            # Create lightweight snapshot for this iteration
+            snapshot = self._create_iteration_snapshot(parent, inspirations, target_island)
 
             # Submit to process pool
-            future = self.executor.submit(
-                _run_iteration_worker,
-                iteration,
-                db_snapshot,
-                parent.id,
-                [insp.id for insp in inspirations],
-            )
+            future = self.executor.submit(_run_iteration_worker, iteration, snapshot)
 
             return future
 

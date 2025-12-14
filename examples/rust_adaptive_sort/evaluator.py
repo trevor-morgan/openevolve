@@ -4,17 +4,17 @@ Evaluator for Rust adaptive sorting example
 
 import asyncio
 import json
+import logging
+import os
 import subprocess
 import tempfile
 from pathlib import Path
+
 from openevolve.evaluation_result import EvaluationResult
-import logging
-import os
 
 THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 
 logger = logging.getLogger("examples.rust_adaptive_sort.evaluator")
-
 
 
 def evaluate(program_path: str) -> EvaluationResult:
@@ -61,7 +61,7 @@ async def _evaluate(program_path: str) -> EvaluationResult:
 
             # Copy the program to src/lib.rs
             lib_path = project_dir / "src" / "lib.rs"
-            with open(program_path, "r") as src:
+            with open(program_path) as src:
                 lib_content = src.read()
             with open(lib_path, "w") as dst:
                 dst.write(lib_content)
@@ -69,21 +69,21 @@ async def _evaluate(program_path: str) -> EvaluationResult:
             # Create main.rs with benchmark code
             project_source_dir = THIS_FILE_DIR / "sort_test"
             main_file_source = project_source_dir / "src" / "main.rs"
-            with open(main_file_source, "r") as f:
+            with open(main_file_source) as f:
                 main_content = f.read()
             main_path = project_dir / "src" / "main.rs"
             with open(main_path, "w") as f:
                 f.write(main_content)
 
             cargo_toml_source = project_source_dir / "Cargo.toml"
-            with open(cargo_toml_source, "r") as f:
+            with open(cargo_toml_source) as f:
                 cargo_toml_content = f.read()
             cargo_toml_path = project_dir / "Cargo.toml"
             with open(cargo_toml_path, "w") as f:
                 f.write(cargo_toml_content)
 
             cargo_lock_source = project_source_dir / "Cargo.lock"
-            with open(cargo_lock_source, "r") as f:
+            with open(cargo_lock_source) as f:
                 cargo_lock_content = f.read()
             cargo_lock_path = project_dir / "Cargo.lock"
             with open(cargo_lock_path, "w") as f:
@@ -187,7 +187,7 @@ async def _evaluate(program_path: str) -> EvaluationResult:
                         "adaptability_score": 0.0,
                     },
                     artifacts={
-                        "error": f"Failed to parse results: {str(e)}",
+                        "error": f"Failed to parse results: {e!s}",
                         "stdout": run_result.stdout,
                     },
                 )

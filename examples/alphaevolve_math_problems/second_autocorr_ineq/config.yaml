@@ -75,7 +75,7 @@ prompt:
     - gradient_norm: Final gradient magnitude (for gradient-based methods)
 
     COMPUTATIONAL RESOURCES & IMPLEMENTATION STACK:
-    **Core Mathematical Libraries**: 
+    **Core Mathematical Libraries**:
     - numpy, scipy (optimization, integration, FFT for convolutions)
     - sympy (symbolic computation, analytical derivatives)
     - jax (automatic differentiation, GPU acceleration)

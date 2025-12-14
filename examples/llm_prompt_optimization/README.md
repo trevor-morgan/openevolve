@@ -237,15 +237,15 @@ llm_prompt_optimization/
 
 ### IFEval (97.41% accuracy)
 ```
-Follow the instruction below precisely. Structure your response into two 
-distinct parts: 1) a step-by-step reasoning process that explicitly 
-identifies the task, constraints, and required output format, and 2) the 
+Follow the instruction below precisely. Structure your response into two
+distinct parts: 1) a step-by-step reasoning process that explicitly
+identifies the task, constraints, and required output format, and 2) the
 final answer in the exact format specified...
 ```
 
 ### HotpotQA (88.62% accuracy)
 ```
-Answer the following question using the provided context. The answer must 
+Answer the following question using the provided context. The answer must
 integrate information from multiple paragraphs and follow these steps:
 1. Paragraph Analysis: Extract key details from each relevant paragraph...
 2. Synthesis: Combine these details into a single, coherent response...
@@ -260,12 +260,12 @@ Analyze the sentiment: "{input_text}"
 
 Evolved prompt after 100 iterations:
 ```
-Analyze the sentiment of the following text. Determine if the overall 
+Analyze the sentiment of the following text. Determine if the overall
 emotional tone is positive or negative.
 
 Text: "{input_text}"
 
-Response: Provide only a single digit - either 1 for positive sentiment 
+Response: Provide only a single digit - either 1 for positive sentiment
 or 0 for negative sentiment. Do not include any explanation or additional text.
 ```
 Accuracy improvement: 72% → 94%
@@ -300,7 +300,7 @@ To add a new dataset:
 
 1. Create initial prompt: `mydataset_prompt.txt`
 2. Create configuration: `mydataset_prompt_dataset.yaml`
-3. Run evolution: 
+3. Run evolution:
    ```bash
    ./run_evolution.sh mydataset_prompt.txt --iterations 50
    # or directly:

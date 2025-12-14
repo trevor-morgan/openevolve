@@ -39,12 +39,13 @@ Consider these algorithmic improvements for substantial performance gains:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import random
-import numpy as np
-from typing import Any, Dict, List, Optional
+
 import jax
 import jax.numpy as jnp
+import numpy as np
+
 
 @jax.jit
 def _solve_roots_jax(coefficients):
@@ -61,39 +62,40 @@ def _solve_roots_jax(coefficients):
     # Sort the roots in descending order.
     return jnp.sort(real_roots)[::-1]
 
+
 class PolynomialReal:
     """
     Initial implementation of polynomial_real task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the PolynomialReal."""
         pass
-    
+
     def solve(self, problem):
         """
         Solve the polynomial_real problem using a JIT-compiled JAX function.
-        
+
         Args:
             problem: A list of polynomial coefficients in descending order.
-                   
+
         Returns:
             A list of real roots of the polynomial, sorted in decreasing order.
         """
         try:
-            coeffs_np = np.array(problem, dtype=np.float64) # Use float64 for better precision
+            coeffs_np = np.array(problem, dtype=np.float64)  # Use float64 for better precision
 
             # Handle edge cases for zero or constant polynomials
             # Find the first non-zero coefficient to determine the true degree
             first_nonzero_idx = 0
             for i, coeff in enumerate(coeffs_np):
-                if abs(coeff) > 1e-9: # Check for non-zero with a small tolerance
+                if abs(coeff) > 1e-9:  # Check for non-zero with a small tolerance
                     first_nonzero_idx = i
                     break
-            else: # All coefficients are effectively zero
+            else:  # All coefficients are effectively zero
                 return []
-            
+
             trimmed_coeffs = coeffs_np[first_nonzero_idx:]
 
             if len(trimmed_coeffs) <= 1:
@@ -104,22 +106,22 @@ class PolynomialReal:
             # Use a JIT-compiled function for root finding.
             # Convert trimmed_coeffs to jax.numpy array with float64.
             computed_roots = _solve_roots_jax(jnp.array(trimmed_coeffs, dtype=jnp.float64))
-            
+
             # block_until_ready() ensures the asynchronous JAX computation is finished.
             return computed_roots.block_until_ready().tolist()
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -137,7 +139,9 @@ class PolynomialReal:
             """
             coefficients = problem
             reference_roots = np.roots(coefficients)
-            reference_roots = np.real(reference_roots) # Problem states all roots are real, so np.real is sufficient
+            reference_roots = np.real(
+                reference_roots
+            )  # Problem states all roots are real, so np.real is sufficient
             reference_roots = np.sort(reference_roots)[::-1]
             candidate = np.array(solution)
             reference = np.array(reference_roots)
@@ -147,24 +151,26 @@ class PolynomialReal:
                 logging.error(f"Polynomial real solution error {error} exceeds tolerance {tol}.")
                 return False
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = PolynomialReal()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

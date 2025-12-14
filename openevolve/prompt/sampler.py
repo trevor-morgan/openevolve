@@ -2,18 +2,21 @@
 Prompt sampling for OpenEvolve
 """
 
+from __future__ import annotations
+
 import logging
 import random
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any
 
 from openevolve.config import PromptConfig
 from openevolve.prompt.templates import TemplateManager
-from openevolve.utils.format_utils import format_metrics_safe
 from openevolve.utils.metrics_utils import (
-    safe_numeric_average,
-    get_fitness_score,
     format_feature_coordinates,
+    get_fitness_score,
 )
+
+if TYPE_CHECKING:
+    from openevolve.meta_prompting import MetaPromptEvolver
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +32,27 @@ class PromptSampler:
         self.system_template_override = None
         self.user_template_override = None
 
+        # Initialize meta-prompt evolver if enabled
+        self.meta_prompt_evolver: MetaPromptEvolver | None = None
+        if config.meta_prompting.enabled:
+            from openevolve.meta_prompting import MetaPromptEvolver
+
+            self.meta_prompt_evolver = MetaPromptEvolver(config.meta_prompting)
+
+        # Track last selected strategy for reward attribution
+        self._last_strategy_name: str | None = None
+        self._last_strategy_context: dict | None = None
+        self._last_island_idx: int | None = None
+
         # Only log once to reduce duplication
         if not hasattr(logger, "_prompt_sampler_logged"):
-            logger.info("Initialized prompt sampler")
+            logger.info(
+                f"Initialized prompt sampler (meta_prompting={config.meta_prompting.enabled})"
+            )
             logger._prompt_sampler_logged = True
 
     def set_templates(
-        self, system_template: Optional[str] = None, user_template: Optional[str] = None
+        self, system_template: str | None = None, user_template: str | None = None
     ) -> None:
         """
         Set custom templates to use for this sampler
@@ -52,20 +69,22 @@ class PromptSampler:
         self,
         current_program: str = "",
         parent_program: str = "",
-        program_metrics: Dict[str, float] = {},
-        previous_programs: List[Dict[str, Any]] = [],
-        top_programs: List[Dict[str, Any]] = [],
-        inspirations: List[Dict[str, Any]] = [],  # Add inspirations parameter
+        program_metrics: dict[str, float] = {},
+        previous_programs: list[dict[str, Any]] = [],
+        top_programs: list[dict[str, Any]] = [],
+        inspirations: list[dict[str, Any]] = [],  # Add inspirations parameter
         language: str = "python",
         evolution_round: int = 0,
         diff_based_evolution: bool = True,
-        template_key: Optional[str] = None,
-        program_artifacts: Optional[Dict[str, Union[str, bytes]]] = None,
-        feature_dimensions: Optional[List[str]] = None,
-        problem_context: Optional[str] = None,  # Discovery mode: problem description
+        template_key: str | None = None,
+        program_artifacts: dict[str, str | bytes] | None = None,
+        feature_dimensions: list[str] | None = None,
+        problem_context: str | None = None,  # Discovery mode: problem description
         discovery_mode: bool = False,  # Whether to use discovery templates
+        island_idx: int | None = None,  # For meta-prompting: which island
+        generation: int = 0,  # For meta-prompting: current generation
         **kwargs: Any,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Build a prompt for the LLM
 
@@ -83,6 +102,8 @@ class PromptSampler:
             program_artifacts: Optional artifacts from program evaluation
             problem_context: Optional problem description for discovery mode
             discovery_mode: Whether to use discovery-specific templates
+            island_idx: Optional island index for meta-prompting
+            generation: Current generation for meta-prompting context
             **kwargs: Additional keys to replace in the user prompt
 
         Returns:
@@ -97,7 +118,9 @@ class PromptSampler:
             user_template_key = self.user_template_override
         elif discovery_mode:
             # Use discovery templates when in discovery mode
-            user_template_key = "discovery_diff_user" if diff_based_evolution else "discovery_full_rewrite_user"
+            user_template_key = (
+                "discovery_diff_user" if diff_based_evolution else "discovery_full_rewrite_user"
+            )
         else:
             # Default behavior: diff-based vs full rewrite
             user_template_key = "diff_user" if diff_based_evolution else "full_rewrite_user"
@@ -147,6 +170,17 @@ class PromptSampler:
         # Prepare problem context for discovery mode
         problem_context_str = problem_context or ""
 
+        # Generate meta-prompt strategy section if enabled
+        meta_prompt_section = ""
+        if self.meta_prompt_evolver:
+            meta_prompt_section = self._generate_meta_prompt_section(
+                program_metrics=program_metrics,
+                feature_dimensions=feature_dimensions,
+                island_idx=island_idx,
+                generation=generation,
+                code_length=len(current_program),
+            )
+
         # Format the final user message
         user_message = user_template.format(
             metrics=metrics_str,
@@ -162,12 +196,184 @@ class PromptSampler:
             **kwargs,
         )
 
+        # Insert meta-prompt section based on position config
+        if meta_prompt_section:
+            position = self.config.meta_prompting.meta_prompt_position
+            if position == "prefix":
+                user_message = meta_prompt_section + "\n\n" + user_message
+            elif position == "suffix":
+                user_message = user_message + "\n\n" + meta_prompt_section
+            else:  # "section" - insert after improvement areas
+                user_message = self._insert_meta_prompt_section(user_message, meta_prompt_section)
+
         return {
             "system": system_message,
             "user": user_message,
         }
 
-    def _format_metrics(self, metrics: Dict[str, float]) -> str:
+    def _generate_meta_prompt_section(
+        self,
+        program_metrics: dict[str, float],
+        feature_dimensions: list[str],
+        island_idx: int | None,
+        generation: int,
+        code_length: int,
+    ) -> str:
+        """Generate meta-prompt strategy section
+
+        Args:
+            program_metrics: Current program metrics
+            feature_dimensions: Feature dimensions for fitness calculation
+            island_idx: Current island index
+            generation: Current generation
+            code_length: Length of current program code
+
+        Returns:
+            Formatted meta-prompt section string
+        """
+        if not self.meta_prompt_evolver:
+            return ""
+
+        # Build context for strategy selection
+        fitness = get_fitness_score(program_metrics, feature_dimensions)
+        context = {
+            "fitness": fitness,
+            "generation": generation,
+            "complexity": program_metrics.get("complexity", 0),
+            "code_length": code_length,
+        }
+
+        # Select strategy
+        strategy_name, strategy_fragment = self.meta_prompt_evolver.select_strategy(
+            island_idx=island_idx,
+            context=context,
+        )
+
+        # Store for reward attribution
+        self._last_strategy_name = strategy_name
+        self._last_strategy_context = context
+        self._last_island_idx = island_idx
+
+        # Format section
+        return f"## Strategy Guidance\n\n{strategy_fragment}"
+
+    def _insert_meta_prompt_section(self, user_message: str, meta_section: str) -> str:
+        """Insert meta-prompt section after improvement areas in prompt
+
+        Args:
+            user_message: Original user message
+            meta_section: Meta-prompt section to insert
+
+        Returns:
+            User message with meta-prompt section inserted
+        """
+        # Try to find a good insertion point - after improvement areas
+        insertion_markers = [
+            "# Program Evolution History",
+            "## Previous Attempts",
+            "## Top Performing Programs",
+            "# Current Program",
+        ]
+
+        for marker in insertion_markers:
+            if marker in user_message:
+                parts = user_message.split(marker, 1)
+                return parts[0] + meta_section + "\n\n" + marker + parts[1]
+
+        # Fallback: append to end
+        return user_message + "\n\n" + meta_section
+
+    def report_outcome(
+        self,
+        parent_fitness: float,
+        child_fitness: float,
+        island_idx: int | None = None,
+    ) -> None:
+        """Report mutation outcome for meta-prompt learning
+
+        Call this after evaluation to update strategy statistics.
+
+        Args:
+            parent_fitness: Parent program's fitness score
+            child_fitness: Child program's fitness score
+            island_idx: Island index (uses last selection if None)
+        """
+        if not self.meta_prompt_evolver or not self._last_strategy_name:
+            return
+
+        self.meta_prompt_evolver.report_outcome(
+            parent_fitness=parent_fitness,
+            child_fitness=child_fitness,
+            island_idx=island_idx or self._last_island_idx,
+        )
+
+        # Clear tracking state
+        self._last_strategy_name = None
+        self._last_strategy_context = None
+        self._last_island_idx = None
+
+    def report_explicit_outcome(
+        self,
+        strategy_name: str,
+        parent_fitness: float,
+        child_fitness: float,
+        island_idx: int | None = None,
+        context: dict | None = None,
+    ) -> None:
+        """Report outcome for an explicitly provided strategy.
+
+        This is used in process-parallel evolution where strategy selection
+        happens in worker processes, but reward attribution must occur in the
+        main process for correct checkpointing.
+
+        Args:
+            strategy_name: Strategy that was applied in the worker
+            parent_fitness: Parent program fitness score
+            child_fitness: Child program fitness score
+            island_idx: Island where strategy was applied
+            context: Context dict used during selection (optional)
+        """
+        if not self.meta_prompt_evolver or not strategy_name:
+            return
+
+        reward = self.meta_prompt_evolver.compute_reward(parent_fitness, child_fitness)
+        self.meta_prompt_evolver.update_reward(
+            strategy_name=strategy_name,
+            reward=reward,
+            island_idx=island_idx,
+            context=context,
+        )
+
+    def get_meta_prompt_summary(self) -> dict[str, Any] | None:
+        """Get meta-prompt strategy performance summary
+
+        Returns:
+            Summary dict or None if meta-prompting is disabled
+        """
+        if not self.meta_prompt_evolver:
+            return None
+        return self.meta_prompt_evolver.get_strategy_summary()
+
+    def save_meta_prompt_state(self) -> dict[str, Any] | None:
+        """Save meta-prompt evolver state for checkpointing
+
+        Returns:
+            State dict or None if meta-prompting is disabled
+        """
+        if not self.meta_prompt_evolver:
+            return None
+        return self.meta_prompt_evolver.save_state()
+
+    def load_meta_prompt_state(self, state: dict[str, Any]) -> None:
+        """Load meta-prompt evolver state from checkpoint
+
+        Args:
+            state: State dict from save_meta_prompt_state()
+        """
+        if self.meta_prompt_evolver and state:
+            self.meta_prompt_evolver.load_state(state)
+
+    def _format_metrics(self, metrics: dict[str, float]) -> str:
         """Format metrics for the prompt using safe formatting"""
         # Use safe formatting to handle mixed numeric and string values
         formatted_parts = []
@@ -185,9 +391,9 @@ class PromptSampler:
         self,
         current_program: str,
         parent_program: str,
-        metrics: Dict[str, float],
-        previous_programs: List[Dict[str, Any]],
-        feature_dimensions: Optional[List[str]] = None,
+        metrics: dict[str, float],
+        previous_programs: list[dict[str, Any]],
+        feature_dimensions: list[str] | None = None,
     ) -> str:
         """Identify improvement areas with proper fitness/feature separation"""
 
@@ -241,11 +447,11 @@ class PromptSampler:
 
     def _format_evolution_history(
         self,
-        previous_programs: List[Dict[str, Any]],
-        top_programs: List[Dict[str, Any]],
-        inspirations: List[Dict[str, Any]],
+        previous_programs: list[dict[str, Any]],
+        top_programs: list[dict[str, Any]],
+        inspirations: list[dict[str, Any]],
         language: str,
-        feature_dimensions: Optional[List[str]] = None,
+        feature_dimensions: list[str] | None = None,
     ) -> str:
         """Format the evolution history for the prompt"""
         # Get templates
@@ -417,9 +623,9 @@ class PromptSampler:
 
     def _format_inspirations_section(
         self,
-        inspirations: List[Dict[str, Any]],
+        inspirations: list[dict[str, Any]],
         language: str,
-        feature_dimensions: Optional[List[str]] = None,
+        feature_dimensions: list[str] | None = None,
     ) -> str:
         """
         Format the inspirations section for the prompt
@@ -470,7 +676,7 @@ class PromptSampler:
         )
 
     def _determine_program_type(
-        self, program: Dict[str, Any], feature_dimensions: Optional[List[str]] = None
+        self, program: dict[str, Any], feature_dimensions: list[str] | None = None
     ) -> str:
         """
         Determine the type/category of an inspiration program
@@ -502,7 +708,7 @@ class PromptSampler:
         else:
             return "Exploratory"
 
-    def _extract_unique_features(self, program: Dict[str, Any]) -> str:
+    def _extract_unique_features(self, program: dict[str, Any]) -> str:
         """
         Extract unique features of an inspiration program
 
@@ -576,7 +782,7 @@ class PromptSampler:
 
         return result
 
-    def _render_artifacts(self, artifacts: Dict[str, Union[str, bytes]]) -> str:
+    def _render_artifacts(self, artifacts: dict[str, str | bytes]) -> str:
         """
         Render artifacts for prompt inclusion
 
@@ -605,7 +811,7 @@ class PromptSampler:
         else:
             return ""
 
-    def _safe_decode_artifact(self, value: Union[str, bytes]) -> str:
+    def _safe_decode_artifact(self, value: str | bytes) -> str:
         """
         Safely decode an artifact value to string
 

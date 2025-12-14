@@ -6,16 +6,14 @@ AlgoTune baseline implementation to measure performance improvements.
 The speedup becomes the primary fitness score for evolution.
 """
 
-import importlib.util
-import numpy as np
-import time
 import concurrent.futures
-import traceback
-import logging
+import importlib.util
 import sys
-import os
+import time
+import traceback
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+
+import numpy as np
 
 # Import EvaluationResult for artifacts support
 from openevolve.evaluation_result import EvaluationResult
@@ -23,6 +21,7 @@ from openevolve.evaluation_result import EvaluationResult
 # Add AlgoTune to path for importing reference tasks
 # These paths will be dynamically determined based on the AlgoTune installation
 # The adapter will handle path setup when the evaluator is created
+
 
 # Setup AlgoTune paths dynamically
 def setup_algotune_paths():
@@ -33,29 +32,32 @@ def setup_algotune_paths():
         Path(__file__).parent.parent.parent.parent / "AlgoTune",
         Path.home() / "github" / "AlgoTune",
     ]
-    
+
     algotune_base = None
     for path in possible_algotune_paths:
         if path.exists():
             algotune_base = path
             break
-    
+
     if algotune_base is None:
         print("Warning: Could not find AlgoTune installation")
         return False
-    
+
     # Add AlgoTune base directory to path
     if str(algotune_base) not in sys.path:
         sys.path.insert(0, str(algotune_base))
-    
+
     return True
+
 
 # Setup paths and try to import AlgoTune tasks
 if setup_algotune_paths():
     try:
         from AlgoTuneTasks.base import TASK_REGISTRY
+
         # Import the specific psd_cone_projection task to register it
         from AlgoTuneTasks.psd_cone_projection.psd_cone_projection import PSDConeProjection
+
         print("Successfully imported AlgoTune tasks and psd_cone_projection")
     except ImportError as e:
         print(f"Error: Could not import AlgoTune tasks: {e}")
@@ -64,6 +66,7 @@ if setup_algotune_paths():
 else:
     print("Warning: Could not setup AlgoTune paths")
     TASK_REGISTRY = {}
+
 
 def run_with_timeout(func, args=(), kwargs={}, timeout_seconds=30):
     """
@@ -86,6 +89,7 @@ def run_with_timeout(func, args=(), kwargs={}, timeout_seconds=30):
         except concurrent.futures.TimeoutError:
             raise TimeoutError(f"Function timed out after {timeout_seconds} seconds")
 
+
 def safe_convert(value):
     """Convert a value safely for evaluation"""
     try:
@@ -98,45 +102,49 @@ def safe_convert(value):
     except Exception:
         return value
 
-def calculate_speedup(baseline_time_ms: float, evolved_time_ms: float, is_valid: bool) -> Optional[float]:
+
+def calculate_speedup(
+    baseline_time_ms: float, evolved_time_ms: float, is_valid: bool
+) -> float | None:
     """
     Calculate speedup between baseline and evolved solution.
-    
+
     Speedup = (Baseline Time) / (Evolved Time)
     Higher is better.
-    
+
     Args:
         baseline_time_ms: Time taken by baseline implementation
         evolved_time_ms: Time taken by evolved solution
         is_valid: Whether the evolved solution is valid
-        
+
     Returns:
         Speedup value or None if calculation is not possible
     """
     if not is_valid:
         return None
-        
+
     if baseline_time_ms is None or baseline_time_ms <= 0:
         return None
-        
+
     if evolved_time_ms is None:
         return None
-        
+
     if evolved_time_ms <= 0:
-        return float('inf')  # Infinite speedup for instant solution
-        
+        return float("inf")  # Infinite speedup for instant solution
+
     return baseline_time_ms / evolved_time_ms
+
 
 def measure_baseline_performance(task_instance, problem, num_runs=3, warmup_runs=1):
     """
     Measure baseline performance using the original AlgoTune implementation.
-    
+
     Args:
         task_instance: The AlgoTune task instance
         problem: Problem to solve
         num_runs: Number of timing runs
         warmup_runs: Number of warmup runs
-        
+
     Returns:
         Dictionary with baseline timing results
     """
@@ -147,7 +155,7 @@ def measure_baseline_performance(task_instance, problem, num_runs=3, warmup_runs
                 task_instance.solve(problem)
             except Exception:
                 pass  # Ignore warmup errors
-                
+
         # Timing runs
         times = []
         for _ in range(num_runs):
@@ -161,44 +169,45 @@ def measure_baseline_performance(task_instance, problem, num_runs=3, warmup_runs
             except Exception as e:
                 print(f"Baseline run failed: {e}")
                 continue
-                
+
         if not times:
             return {
                 "success": False,
                 "error": "All baseline runs failed",
                 "avg_time_ms": None,
                 "min_time_ms": None,
-                "std_time_ms": None
+                "std_time_ms": None,
             }
-            
+
         return {
             "success": True,
             "avg_time_ms": float(np.mean(times)),
             "min_time_ms": float(np.min(times)),
             "std_time_ms": float(np.std(times)),
-            "times": times
+            "times": times,
         }
-        
+
     except Exception as e:
         return {
             "success": False,
             "error": str(e),
             "avg_time_ms": None,
             "min_time_ms": None,
-            "std_time_ms": None
+            "std_time_ms": None,
         }
+
 
 def measure_evolved_performance(program, problem, num_runs=3, warmup_runs=1, timeout_seconds=30):
     """
     Measure evolved solution performance.
-    
+
     Args:
         program: The evolved program module
         problem: Problem to solve
         num_runs: Number of timing runs
         warmup_runs: Number of warmup runs
         timeout_seconds: Timeout per run
-        
+
     Returns:
         Dictionary with evolved timing results
     """
@@ -206,17 +215,21 @@ def measure_evolved_performance(program, problem, num_runs=3, warmup_runs=1, tim
         # Warmup runs
         for _ in range(warmup_runs):
             try:
-                run_with_timeout(program.run_solver, args=(problem,), timeout_seconds=timeout_seconds)
+                run_with_timeout(
+                    program.run_solver, args=(problem,), timeout_seconds=timeout_seconds
+                )
             except Exception:
                 pass  # Ignore warmup errors
-                
+
         # Timing runs
         times = []
         results = []
         for _ in range(num_runs):
             start_time = time.perf_counter()
             try:
-                result = run_with_timeout(program.run_solver, args=(problem,), timeout_seconds=timeout_seconds)
+                result = run_with_timeout(
+                    program.run_solver, args=(problem,), timeout_seconds=timeout_seconds
+                )
                 end_time = time.perf_counter()
                 elapsed_ms = (end_time - start_time) * 1000
                 times.append(elapsed_ms)
@@ -227,7 +240,7 @@ def measure_evolved_performance(program, problem, num_runs=3, warmup_runs=1, tim
             except Exception as e:
                 print(f"Evolved run failed: {e}")
                 continue
-                
+
         if not times:
             return {
                 "success": False,
@@ -235,18 +248,18 @@ def measure_evolved_performance(program, problem, num_runs=3, warmup_runs=1, tim
                 "avg_time_ms": None,
                 "min_time_ms": None,
                 "std_time_ms": None,
-                "results": []
+                "results": [],
             }
-            
+
         return {
             "success": True,
             "avg_time_ms": float(np.mean(times)),
             "min_time_ms": float(np.min(times)),
             "std_time_ms": float(np.std(times)),
             "times": times,
-            "results": results
+            "results": results,
         }
-        
+
     except Exception as e:
         return {
             "success": False,
@@ -254,13 +267,14 @@ def measure_evolved_performance(program, problem, num_runs=3, warmup_runs=1, tim
             "avg_time_ms": None,
             "min_time_ms": None,
             "std_time_ms": None,
-            "results": []
+            "results": [],
         }
+
 
 def evaluate(program_path, config=None):
     """
     Enhanced evaluation with baseline comparison for psd_cone_projection task.
-    
+
     This evaluator:
     1. Loads the evolved solve method from initial_program.py
     2. Generates test problems using the original AlgoTune task
@@ -281,15 +295,17 @@ def evaluate(program_path, config=None):
         if config is None:
             # Try to load config from YAML file first
             try:
-                import yaml
                 from pathlib import Path
+
+                import yaml
+
                 config_path = Path(__file__).parent / "config.yaml"
                 if config_path.exists():
-                    with open(config_path, 'r') as f:
+                    with open(config_path) as f:
                         config = yaml.safe_load(f)
                 else:
                     raise FileNotFoundError("config.yaml not found")
-            except Exception as e:
+            except Exception:
                 # Could not load config.yaml, using defaults
                 config = {
                     "algotune": {
@@ -297,10 +313,10 @@ def evaluate(program_path, config=None):
                         "data_size": 100,
                         "timeout": 300,
                         "num_runs": 3,
-                        "warmup_runs": 1
+                        "warmup_runs": 1,
                     }
                 }
-        
+
         # Extract AlgoTune task-specific settings from config
         algotune_config = config.get("algotune", {})
         num_trials = algotune_config.get("num_trials", 5)
@@ -308,7 +324,7 @@ def evaluate(program_path, config=None):
         timeout_seconds = algotune_config.get("timeout", 300)
         num_runs = algotune_config.get("num_runs", 3)
         warmup_runs = algotune_config.get("warmup_runs", 1)
-        
+
         # Load the program
         spec = importlib.util.spec_from_file_location("program", program_path)
         program = importlib.util.module_from_spec(spec)
@@ -316,7 +332,7 @@ def evaluate(program_path, config=None):
 
         # Check if the required function exists
         if not hasattr(program, "run_solver"):
-            print(f"Error: program does not have 'run_solver' function")
+            print("Error: program does not have 'run_solver' function")
             return {
                 "correctness_score": 0.0,
                 "performance_score": 0.0,
@@ -328,7 +344,7 @@ def evaluate(program_path, config=None):
                     "success_rate": 0.0,
                     "baseline_times": [],
                     "evolved_times": [],
-                    "speedups": []
+                    "speedups": [],
                 },
                 "error": "Missing run_solver function",
             }
@@ -337,9 +353,9 @@ def evaluate(program_path, config=None):
         task_class = None
         if "psd_cone_projection" in TASK_REGISTRY:
             task_class = TASK_REGISTRY["psd_cone_projection"]
-            print(f"Successfully loaded psd_cone_projection task from registry")
+            print("Successfully loaded psd_cone_projection task from registry")
         else:
-            print(f"Error: psd_cone_projection task not found in TASK_REGISTRY")
+            print("Error: psd_cone_projection task not found in TASK_REGISTRY")
             print(f"Available tasks: {list(TASK_REGISTRY.keys())}")
             raise Exception("Could not load psd_cone_projection task from AlgoTune registry")
 
@@ -365,29 +381,33 @@ def evaluate(program_path, config=None):
                 baseline_result = measure_baseline_performance(
                     task_instance, problem, num_runs, warmup_runs
                 )
-                
+
                 if not baseline_result["success"]:
-                    print(f"Trial {trial}: Baseline measurement failed: {baseline_result.get('error', 'Unknown error')}")
+                    print(
+                        f"Trial {trial}: Baseline measurement failed: {baseline_result.get('error', 'Unknown error')}"
+                    )
                     continue
 
                 # Measure evolved performance
                 evolved_result = measure_evolved_performance(
                     program, problem, num_runs, warmup_runs, timeout_seconds
                 )
-                
+
                 if not evolved_result["success"]:
-                    print(f"Trial {trial}: Evolved measurement failed: {evolved_result.get('error', 'Unknown error')}")
+                    print(
+                        f"Trial {trial}: Evolved measurement failed: {evolved_result.get('error', 'Unknown error')}"
+                    )
                     continue
 
                 # Validate evolved solution
                 correctness_score = 0.0
                 is_valid = False
-                
+
                 if evolved_result["results"]:
                     # Use the first result for validation
                     evolved_solution = evolved_result["results"][0]
                     evolved_solution = safe_convert(evolved_solution)
-                    
+
                     try:
                         # Use the evolved program's own is_solution method for validation
                         # This ensures consistency between the extracted solve and validation logic
@@ -395,12 +415,16 @@ def evaluate(program_path, config=None):
                         is_valid = evolved_solver.is_solution(problem, evolved_solution)
                         correctness_score = 1.0 if is_valid else 0.0
                     except Exception as e:
-                        print(f"Trial {trial}: Error checking solution validity with evolved is_solution: {e}")
+                        print(
+                            f"Trial {trial}: Error checking solution validity with evolved is_solution: {e}"
+                        )
                         correctness_score = 0.0
                         is_valid = False
 
                 # Calculate speedup
-                baseline_time = baseline_result["min_time_ms"]  # Use minimum time for fair comparison
+                baseline_time = baseline_result[
+                    "min_time_ms"
+                ]  # Use minimum time for fair comparison
                 evolved_time = evolved_result["min_time_ms"]
                 speedup = calculate_speedup(baseline_time, evolved_time, is_valid)
 
@@ -408,18 +432,18 @@ def evaluate(program_path, config=None):
                 correctness_scores.append(correctness_score)
                 baseline_times.append(baseline_time)
                 evolved_times.append(evolved_time)
-                
+
                 if speedup is not None:
                     speedups.append(speedup)
                     valid_count += 1
-                
+
                 # Performance score based on execution time
                 performance_score = 1.0 / (1.0 + evolved_time) if evolved_time > 0 else 0.0
                 performance_scores.append(performance_score)
                 success_count += 1
 
             except Exception as e:
-                print(f"Trial {trial}: Error - {str(e)}")
+                print(f"Trial {trial}: Error - {e!s}")
                 print(traceback.format_exc())
                 continue
 
@@ -436,7 +460,7 @@ def evaluate(program_path, config=None):
                     "success_rate": 0.0,
                     "baseline_times": [],
                     "evolved_times": [],
-                    "speedups": []
+                    "speedups": [],
                 },
                 "error": "All trials failed",
             }
@@ -469,7 +493,7 @@ def evaluate(program_path, config=None):
             "evolved_times": evolved_times,
             "speedups": speedups,
             "num_valid_solutions": valid_count,
-            "num_total_trials": success_count
+            "num_total_trials": success_count,
         }
 
         return {
@@ -483,7 +507,7 @@ def evaluate(program_path, config=None):
         }
 
     except Exception as e:
-        print(f"Evaluation failed completely: {str(e)}")
+        print(f"Evaluation failed completely: {e!s}")
         print(traceback.format_exc())
         return {
             "correctness_score": 0.0,
@@ -496,10 +520,11 @@ def evaluate(program_path, config=None):
                 "success_rate": 0.0,
                 "baseline_times": [],
                 "evolved_times": [],
-                "speedups": []
+                "speedups": [],
             },
             "error": str(e),
         }
+
 
 # Stage-based evaluation for cascade evaluation
 def evaluate_stage1(program_path, config=None):
@@ -509,28 +534,24 @@ def evaluate_stage1(program_path, config=None):
         if config is None:
             # Try to load config from YAML file first
             try:
-                import yaml
                 from pathlib import Path
+
+                import yaml
+
                 config_path = Path(__file__).parent / "config.yaml"
                 if config_path.exists():
-                    with open(config_path, 'r') as f:
+                    with open(config_path) as f:
                         config = yaml.safe_load(f)
                 else:
                     raise FileNotFoundError("config.yaml not found")
-            except Exception as e:
+            except Exception:
                 # Could not load config.yaml, using defaults
-                config = {
-                    "algotune": {
-                        "num_trials": 5,
-                        "data_size": 100,
-                        "timeout": 300
-                    }
-                }
-        
+                config = {"algotune": {"num_trials": 5, "data_size": 100, "timeout": 300}}
+
         algotune_config = config.get("algotune", {})
         data_size = algotune_config.get("data_size", 100)
         timeout_seconds = algotune_config.get("timeout", 300)
-        
+
         # Load the program
         spec = importlib.util.spec_from_file_location("program", program_path)
         program = importlib.util.module_from_spec(spec)
@@ -539,16 +560,21 @@ def evaluate_stage1(program_path, config=None):
         # Check if the required function exists
         if not hasattr(program, "run_solver"):
             return EvaluationResult(
-            metrics={"runs_successfully": 0.0},
-            artifacts={"error": "Missing run_solver function", "traceback": traceback.format_exc() if "Missing run_solver function" != "Timeout" else "Timeout occurred"}
-        )
+                metrics={"runs_successfully": 0.0},
+                artifacts={
+                    "error": "Missing run_solver function",
+                    "traceback": traceback.format_exc()
+                    if "Missing run_solver function" != "Timeout"
+                    else "Timeout occurred",
+                },
+            )
 
         # Get the original task for reference solutions and problem generation
         task_class = None
         if "psd_cone_projection" in TASK_REGISTRY:
             task_class = TASK_REGISTRY["psd_cone_projection"]
         else:
-            print(f"Error: psd_cone_projection task not found in TASK_REGISTRY")
+            print("Error: psd_cone_projection task not found in TASK_REGISTRY")
             print(f"Available tasks: {list(TASK_REGISTRY.keys())}")
 
         try:
@@ -559,43 +585,52 @@ def evaluate_stage1(program_path, config=None):
             else:
                 # Generic fallback test problem
                 test_problem = {"test_data": [1, 2, 3], "random_seed": 42}
-            
-            result = run_with_timeout(program.run_solver, args=(test_problem,), timeout_seconds=timeout_seconds)
+
+            result = run_with_timeout(
+                program.run_solver, args=(test_problem,), timeout_seconds=timeout_seconds
+            )
 
             # Basic validity check
             if result is not None:
                 return EvaluationResult(
-            metrics={
-                "runs_successfully": 1.0,
-                "basic_functionality": 1.0
-            },
-            artifacts={}
-        )
+                    metrics={"runs_successfully": 1.0, "basic_functionality": 1.0}, artifacts={}
+                )
             else:
                 return EvaluationResult(
-            metrics={
-                "runs_successfully": 0.5,
-                "basic_functionality": 0.0
-            },
-            artifacts={"error": "Function returned None", "failure_stage": "stage1"}
-        )
+                    metrics={"runs_successfully": 0.5, "basic_functionality": 0.0},
+                    artifacts={"error": "Function returned None", "failure_stage": "stage1"},
+                )
 
-        except TimeoutError as e:
+        except TimeoutError:
             return EvaluationResult(
-            metrics={"runs_successfully": 0.0},
-            artifacts={"error": "Timeout", "traceback": traceback.format_exc() if "Timeout" != "Timeout" else "Timeout occurred"}
-        )
+                metrics={"runs_successfully": 0.0},
+                artifacts={
+                    "error": "Timeout",
+                    "traceback": traceback.format_exc()
+                    if "Timeout" != "Timeout"
+                    else "Timeout occurred",
+                },
+            )
         except Exception as e:
             return EvaluationResult(
-            metrics={"runs_successfully": 0.0},
-            artifacts={"error": str(e), "traceback": traceback.format_exc() if str(e) != "Timeout" else "Timeout occurred"}
-        )
+                metrics={"runs_successfully": 0.0},
+                artifacts={
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                    if str(e) != "Timeout"
+                    else "Timeout occurred",
+                },
+            )
 
     except Exception as e:
         return EvaluationResult(
             metrics={"runs_successfully": 0.0},
-            artifacts={"error": str(e), "traceback": traceback.format_exc() if str(e) != "Timeout" else "Timeout occurred"}
+            artifacts={
+                "error": str(e),
+                "traceback": traceback.format_exc() if str(e) != "Timeout" else "Timeout occurred",
+            },
         )
+
 
 def evaluate_stage2(program_path, config=None):
     """Second stage evaluation with more thorough testing of the evolved solve method"""

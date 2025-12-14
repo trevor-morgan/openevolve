@@ -13,7 +13,7 @@ Input:
 A dictionary with keys:
   - "signal_x": A list of numbers representing the first signal x.
   - "signal_y": A list of numbers representing the second signal y.
-  - "mode": A string indicating the convolution mode: 
+  - "mode": A string indicating the convolution mode:
     - "full": Returns the full convolution (output length is len(x) + len(y) - 1)
     - "same": Returns the central part of the convolution (output length is max(len(x), len(y)))
     - "valid": Returns only the parts where signals fully overlap (output length is max(len(x) - len(y) + 1, 0))
@@ -63,31 +63,31 @@ Consider these algorithmic improvements for optimal performance:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import random
-from enum import Enum
+
 import numpy as np
 from scipy import signal
 from scipy.fft import next_fast_len
-from typing import Any, Dict, List, Optional
+
 
 class FFTConvolution:
     """
     Initial implementation of fft_convolution task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the FFTConvolution."""
         pass
-    
+
     def solve(self, problem):
         """
         Solve the fft_convolution problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to fft_convolution
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -151,19 +151,19 @@ class FFTConvolution:
 
             solution = {"convolution": convolution_result.tolist()}
             return solution
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -241,7 +241,9 @@ class FFTConvolution:
                 if len(student_result_np) == 0:
                     return True  # Correct empty result for empty input
                 else:
-                    logging.error("Expected empty result for empty input, but got non-empty result.")
+                    logging.error(
+                        "Expected empty result for empty input, but got non-empty result."
+                    )
                     return False
 
             # Check numerical closeness
@@ -261,24 +263,26 @@ class FFTConvolution:
                 return False  # Explicitly return False
 
             return True  # Explicitly return True if all checks passed
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = FFTConvolution()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

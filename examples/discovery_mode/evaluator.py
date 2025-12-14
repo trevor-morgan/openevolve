@@ -17,8 +17,7 @@ import importlib.util
 import random
 import sys
 import time
-import traceback
-from typing import Dict, Any, List
+from typing import Any
 
 
 def load_program(program_path: str):
@@ -30,7 +29,7 @@ def load_program(program_path: str):
     return module
 
 
-def generate_test_cases() -> List[Dict[str, Any]]:
+def generate_test_cases() -> list[dict[str, Any]]:
     """Generate test cases of varying difficulty"""
     test_cases = [
         # Basic cases
@@ -39,30 +38,28 @@ def generate_test_cases() -> List[Dict[str, Any]]:
         {"input": [2, 1], "expected": [1, 2], "name": "two_elements"},
         {"input": [3, 2, 1], "expected": [1, 2, 3], "name": "reversed"},
         {"input": [1, 2, 3], "expected": [1, 2, 3], "name": "already_sorted"},
-
         # Edge cases
         {"input": [1, 1, 1], "expected": [1, 1, 1], "name": "all_same"},
         {"input": [-1, -2, -3], "expected": [-3, -2, -1], "name": "negative"},
         {"input": [0, -1, 1], "expected": [-1, 0, 1], "name": "with_zero"},
-
         # Larger cases
-        {"input": list(range(100, 0, -1)), "expected": list(range(1, 101)), "name": "hundred_reversed"},
+        {
+            "input": list(range(100, 0, -1)),
+            "expected": list(range(1, 101)),
+            "name": "hundred_reversed",
+        },
     ]
 
     # Random cases
     for i in range(5):
         size = random.randint(10, 50)
         data = [random.randint(-1000, 1000) for _ in range(size)]
-        test_cases.append({
-            "input": data,
-            "expected": sorted(data),
-            "name": f"random_{i}"
-        })
+        test_cases.append({"input": data, "expected": sorted(data), "name": f"random_{i}"})
 
     return test_cases
 
 
-def evaluate_stage1(program_path: str) -> Dict[str, float]:
+def evaluate_stage1(program_path: str) -> dict[str, float]:
     """
     Stage 1: Quick validation - does it sort at all?
 
@@ -72,7 +69,7 @@ def evaluate_stage1(program_path: str) -> Dict[str, float]:
     try:
         module = load_program(program_path)
 
-        if not hasattr(module, 'solve'):
+        if not hasattr(module, "solve"):
             return {"correctness": 0.0, "error": 1.0, "stage1_passed": 0.0}
 
         # Test basic cases only
@@ -108,7 +105,7 @@ def evaluate_stage1(program_path: str) -> Dict[str, float]:
         }
 
 
-def evaluate_stage2(program_path: str) -> Dict[str, float]:
+def evaluate_stage2(program_path: str) -> dict[str, float]:
     """
     Stage 2: Comprehensive testing - correctness and edge cases
     """
@@ -135,7 +132,7 @@ def evaluate_stage2(program_path: str) -> Dict[str, float]:
                     if test["name"] in ["empty", "single", "all_same", "negative", "with_zero"]:
                         edge_case_total += 1
 
-            except Exception as e:
+            except Exception:
                 if test["name"] in ["empty", "single", "all_same", "negative", "with_zero"]:
                     edge_case_total += 1
 
@@ -148,7 +145,7 @@ def evaluate_stage2(program_path: str) -> Dict[str, float]:
             "stage2_passed": 1.0 if correctness >= 0.7 else 0.0,
         }
 
-    except Exception as e:
+    except Exception:
         return {
             "correctness": 0.0,
             "robustness": 0.0,
@@ -156,7 +153,7 @@ def evaluate_stage2(program_path: str) -> Dict[str, float]:
         }
 
 
-def evaluate_stage3(program_path: str) -> Dict[str, float]:
+def evaluate_stage3(program_path: str) -> dict[str, float]:
     """
     Stage 3: Performance evaluation - efficiency metrics
     """
@@ -192,11 +189,11 @@ def evaluate_stage3(program_path: str) -> Dict[str, float]:
         efficiency = max(0.0, min(1.0, efficiency))
 
         # Memory estimation (crude - based on code analysis)
-        with open(program_path, 'r') as f:
+        with open(program_path) as f:
             code = f.read()
 
         # Heuristic: more list/dict literals and comprehensions = more memory
-        memory_indicators = code.count('[') + code.count('{') + code.count('append')
+        memory_indicators = code.count("[") + code.count("{") + code.count("append")
         memory_score = max(0.0, 1.0 - memory_indicators * 0.05)
 
         return {
@@ -206,7 +203,7 @@ def evaluate_stage3(program_path: str) -> Dict[str, float]:
             "stage3_passed": 1.0,
         }
 
-    except Exception as e:
+    except Exception:
         return {
             "efficiency": 0.0,
             "memory_efficiency": 0.0,
@@ -214,7 +211,7 @@ def evaluate_stage3(program_path: str) -> Dict[str, float]:
         }
 
 
-def evaluate(program_path: str) -> Dict[str, float]:
+def evaluate(program_path: str) -> dict[str, float]:
     """
     Main evaluation function - runs all stages and combines scores
 
@@ -241,11 +238,7 @@ def evaluate(program_path: str) -> Dict[str, float]:
     efficiency = metrics.get("efficiency", 0.0)
     robustness = metrics.get("robustness", 0.0)
 
-    combined_score = (
-        correctness * 0.5 +
-        efficiency * 0.3 +
-        robustness * 0.2
-    )
+    combined_score = correctness * 0.5 + efficiency * 0.3 + robustness * 0.2
 
     metrics["combined_score"] = combined_score
 

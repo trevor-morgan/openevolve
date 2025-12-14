@@ -7,11 +7,10 @@ import time
 import unittest
 
 from openevolve.config import DatabaseConfig
-from openevolve.database import Program, ProgramDatabase
+from openevolve.database import ProgramDatabase
 
 
 class TestArtifactCleanup(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
         self.db_path = os.path.join(self.temp_dir, "db")

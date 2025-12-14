@@ -15,7 +15,7 @@ llm:
   timeout: 240
   retries: 10
   retry_delay: 10
-  
+
 # Prompt configuration
 prompt:
   system_message: |
@@ -36,10 +36,10 @@ prompt:
       - 'stack': 0.9906 to 1.1722 (lower loss values)
     - Key observation: Increasing parallel_size decreases loss
       - parallel_size=1: avg loss 1.9780 (pile), 1.0972 (stack)
-      - parallel_size=2: avg loss 1.9480 (pile), 1.0767 (stack)  
+      - parallel_size=2: avg loss 1.9480 (pile), 1.0767 (stack)
       - parallel_size=4: avg loss 1.9259 (pile), 1.0635 (stack)
     - Experimental setup: Augment input with parallel_size copies, pass through LLM, aggregate responses
-    
+
     The function signatures must remain:
 
     ```python

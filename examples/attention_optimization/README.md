@@ -163,12 +163,12 @@ def estimate_performance_from_ir(self, optimized_metrics, baseline_metrics, para
     # Analyze IR characteristics
     ops_ratio = optimized_metrics['operations'] / baseline_metrics['operations']
     size_ratio = optimized_metrics['total_chars'] / baseline_metrics['total_chars']
-    
+
     # Heuristic performance model
     base_speedup = 1.0
     if size_ratio < 1.0:
         base_speedup += (1.0 - size_ratio) * 0.5
-    
+
     # Parameter-specific bonuses
     if params.get('unroll_factor', 1) > 1:
         base_speedup += min(unroll_factor * 0.05, 0.3)
@@ -179,7 +179,7 @@ def estimate_performance_from_ir(self, optimized_metrics, baseline_metrics, para
 def benchmark_real_execution(self, llvm_ir, test_config):
     # Compile LLVM IR to executable
     executable = self.compile_llvm_to_executable(llvm_ir)
-    
+
     # Run multiple trials with actual inputs
     runtimes = []
     for trial in range(num_trials):
@@ -187,7 +187,7 @@ def benchmark_real_execution(self, llvm_ir, test_config):
         result = executable.run(sample_inputs)
         runtime = time.perf_counter() - start
         runtimes.append(runtime)
-    
+
     return np.mean(runtimes), verify_correctness(result)
 ```
 
@@ -253,16 +253,16 @@ Add new parameters to `initial_program.py`:
 ```python
 def optimize_attention():
     # Existing parameters...
-    
+
     # New memory hierarchy parameters
     l1_cache_size = random.choice([32, 64, 128])  # KB
     l2_cache_size = random.choice([256, 512, 1024])  # KB
     prefetch_distance = random.choice([0, 2, 4, 8])
-    
+
     # New vectorization parameters  
     vector_width = random.choice([128, 256, 512])  # bits
     use_fma = random.choice([True, False])
-    
+
     return {
         **existing_params,
         'l1_cache_size': l1_cache_size,
@@ -278,12 +278,12 @@ Update `evaluator.py` to handle new parameters:
 ```python
 def apply_optimizations(self, mlir_content, params):
     passes = ["canonicalize", "cse"]
-    
+
     # Handle new cache parameters
     if params.get('l1_cache_size', 0) > 0:
         cache_size = params['l1_cache_size']
         passes.append(f"linalg-tile{{tile-cache-size={cache_size}k}}")
-    
+
     # Handle new vectorization parameters
     if params.get('vector_width', 0) > 128:
         width = params['vector_width']
@@ -320,16 +320,16 @@ Create specialized evaluators for different targets:
 class GPUAttentionEvaluator(MLIRAttentionEvaluator):
     def apply_optimizations(self, mlir_content, params):
         passes = super().apply_optimizations(mlir_content, params)
-        
+
         # GPU-specific optimizations
         if params.get('use_shared_memory', False):
             passes.append("gpu-map-parallel-loops")
             passes.append("gpu-launch-func")
-        
+
         if params.get('thread_block_size', 0) > 0:
             block_size = params['thread_block_size']
             passes.append(f"gpu-kernel-outlining{{block-size={block_size}}}")
-        
+
         return passes
 ```
 

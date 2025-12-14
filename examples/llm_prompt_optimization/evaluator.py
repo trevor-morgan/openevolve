@@ -2,17 +2,18 @@
 Evaluator for HuggingFace dataset-based prompt optimization.
 """
 
-import re
-import traceback
-import yaml
 import os
+import re
 import time
+import traceback
+
+import yaml
+from datasets import load_dataset
 from openai import OpenAI
 from tqdm import tqdm
-from datasets import load_dataset
 
 # Read config.yaml to get model settings
-with open(os.path.join(os.path.dirname(__file__), "config.yaml"), "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "config.yaml")) as f:
     config = yaml.safe_load(f)
 
 # Get model settings from config
@@ -41,7 +42,6 @@ test_model = OpenAI(base_url=api_base)
 print(f"Initialized OpenAI client with model: {TASK_MODEL_NAME}")
 
 # Determine which dataset to use based on the OPENEVOLVE_PROMPT environment variable
-import sys
 
 prompt_file = os.environ.get("OPENEVOLVE_PROMPT")
 if not prompt_file:
@@ -136,14 +136,14 @@ def calculate_prompt_features(prompt):
 def load_prompt_config(prompt_path):
     """Load the prompt from text file and dataset config from matching _dataset.yaml file."""
     # Load prompt from text file
-    with open(prompt_path, "r") as f:
+    with open(prompt_path) as f:
         prompt = f.read().strip()
 
     # Load the configuration (already determined from environment variable)
     if not os.path.exists(DATASET_CONFIG_PATH):
         raise FileNotFoundError(f"Dataset configuration not found: {DATASET_CONFIG_PATH}")
 
-    with open(DATASET_CONFIG_PATH, "r") as f:
+    with open(DATASET_CONFIG_PATH) as f:
         config = yaml.safe_load(f)
 
     return config, prompt
@@ -203,7 +203,7 @@ def load_hf_dataset(config):
     if hasattr(dataset, "__len__"):
         print(f"Dataset loaded with {len(dataset)} examples")
     else:
-        print(f"Dataset loaded (streaming mode)")
+        print("Dataset loaded (streaming mode)")
 
     return dataset
 
@@ -284,23 +284,23 @@ def evaluate_prompt(prompt, dataset, config, num_samples):
 
         # Handle potential None response
         if not response:
-            print(f"Warning: No response object from LLM")
+            print("Warning: No response object from LLM")
             total += 1  # Count as incorrect
             continue
 
         if not response.choices:
-            print(f"Warning: No choices in response from LLM")
+            print("Warning: No choices in response from LLM")
             total += 1  # Count as incorrect
             continue
 
         if not response.choices[0].message:
-            print(f"Warning: No message in response choice")
+            print("Warning: No message in response choice")
             total += 1  # Count as incorrect
             continue
 
         output_text = response.choices[0].message.content
         if output_text is None:
-            print(f"Warning: None content in LLM response")
+            print("Warning: None content in LLM response")
             print(f"Full response: {response}")
             total += 1  # Count as incorrect
             continue
@@ -470,7 +470,7 @@ def evaluate_stage1(prompt_path):
     try:
         # Load prompt configuration
         config, prompt = load_prompt_config(prompt_path)
-        print(f"Loaded prompt configuration")
+        print("Loaded prompt configuration")
 
         # Load dataset
         dataset = load_hf_dataset(config)
@@ -501,14 +501,14 @@ def evaluate_stage1(prompt_path):
         }
 
     except Exception as e:
-        print(f"Stage 1 evaluation failed: {str(e)}")
+        print(f"Stage 1 evaluation failed: {e!s}")
         traceback.print_exc()
         print("-" * 80)
 
         # Always return feature dimensions, even on failure
         try:
             # Try to calculate features from the failed prompt
-            with open(prompt_path, "r") as f:
+            with open(prompt_path) as f:
                 failed_prompt = f.read().strip()
             prompt_length, reasoning_sophistication = calculate_prompt_features(failed_prompt)
         except:
@@ -540,7 +540,7 @@ def evaluate_stage2(prompt_path):
     try:
         # Load prompt configuration
         config, prompt = load_prompt_config(prompt_path)
-        print(f"Loaded prompt configuration")
+        print("Loaded prompt configuration")
 
         # Load dataset
         dataset = load_hf_dataset(config)
@@ -571,14 +571,14 @@ def evaluate_stage2(prompt_path):
         }
 
     except Exception as e:
-        print(f"Stage 2 evaluation failed: {str(e)}")
+        print(f"Stage 2 evaluation failed: {e!s}")
         traceback.print_exc()
         print("-" * 80)
 
         # Always return feature dimensions, even on failure
         try:
             # Try to calculate features from the failed prompt
-            with open(prompt_path, "r") as f:
+            with open(prompt_path) as f:
                 failed_prompt = f.read().strip()
             prompt_length, reasoning_sophistication = calculate_prompt_features(failed_prompt)
         except:

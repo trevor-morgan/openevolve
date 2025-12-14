@@ -53,29 +53,29 @@ Consider these algorithmic improvements for significant performance gains:
 This is the initial implementation that will be evolved by OpenEvolve.
 The solve method will be improved through evolution.
 """
+
 import logging
-import random
+
 import numpy as np
-from numpy.typing import NDArray
-from typing import Any, Dict, List, Optional
+
 
 class EigenvectorsComplex:
     """
     Initial implementation of eigenvectors_complex task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
-    
+
     def __init__(self):
         """Initialize the EigenvectorsComplex."""
         pass
-    
+
     def solve(self, problem):
         """
         Solve the eigenvectors_complex problem.
-        
+
         Args:
             problem: Dictionary containing problem data specific to eigenvectors_complex
-                   
+
         Returns:
             The solution in the format expected by the task
         """
@@ -91,30 +91,30 @@ class EigenvectorsComplex:
             """
             A = problem
             eigenvalues, eigenvectors = np.linalg.eig(A)
-            
+
             # Sort eigenvalues and eigenvectors. `lexsort` sorts by the last key first.
             # We want descending order, so we negate the values.
             sort_indices = np.lexsort((-eigenvalues.imag, -eigenvalues.real))
-            
+
             # Reorder the eigenvectors (which are columns) using the sorted indices.
             # The eigenvectors from np.linalg.eig are already normalized to unit length.
             sorted_eigenvectors = eigenvectors[:, sort_indices]
 
             # Convert the result to a list of lists as per the expected output format.
             return sorted_eigenvectors.T.tolist()
-            
+
         except Exception as e:
             logging.error(f"Error in solve method: {e}")
             raise e
-    
+
     def is_solution(self, problem, solution):
         """
         Check if the provided solution is valid.
-        
+
         Args:
             problem: The original problem
             solution: The proposed solution
-                   
+
         Returns:
             True if the solution is valid, False otherwise
         """
@@ -174,24 +174,26 @@ class EigenvectorsComplex:
                 logging.error(f"Maximum relative error {max_rel_error} exceeds tolerance {tol}.")
                 return False
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in is_solution method: {e}")
             return False
+
 
 def run_solver(problem):
     """
     Main function to run the solver.
     This function is used by the evaluator to test the evolved solution.
-    
+
     Args:
         problem: The problem to solve
-        
+
     Returns:
         The solution
     """
     solver = EigenvectorsComplex()
     return solver.solve(problem)
+
 
 # EVOLVE-BLOCK-END
 

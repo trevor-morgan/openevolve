@@ -13,12 +13,12 @@ Goal: 5-15% performance improvement through custom Metal kernel optimization
 Evolution Target: The Metal kernel source code that computes GQA attention
 """
 
+import math
+import time
+from typing import Any
+
 import mlx.core as mx
 import mlx.nn as nn
-import numpy as np
-import math
-from typing import Optional, Tuple, Any
-import time
 
 
 def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
@@ -72,51 +72,51 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
     // Qwen3 GQA Metal Kernel - Optimized for 40:8 head pattern
     // Thread mapping: each thread processes one query position
     uint thread_id = thread_position_in_grid.x;
-    uint head_idx = thread_position_in_grid.y; 
+    uint head_idx = thread_position_in_grid.y;
     uint batch_idx = thread_position_in_grid.z;
     uint query_pos = thread_id;
-    
+
     // Bounds checking
     if (batch_idx >= BATCH_SIZE || head_idx >= NUM_HEADS || query_pos >= SEQ_LEN) {
         return;
     }
-    
+
     // Extract scalar values from input arrays
     T scale_val = scale[0];
     bool use_mask_val = use_mask[0] > 0;
-    
+
     // GQA mapping: determine which KV head corresponds to this query head
     uint kv_head_idx = head_idx / HEADS_PER_KV;  // 5 query heads per KV head
-    
+
     // Pre-calculate base indices for memory access optimization
-    const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) + 
-                        head_idx * (SEQ_LEN * HEAD_DIM) + 
+    const uint q_base = batch_idx * (NUM_HEADS * SEQ_LEN * HEAD_DIM) +
+                        head_idx * (SEQ_LEN * HEAD_DIM) +
                         query_pos * HEAD_DIM;
-                        
-    const uint k_base_start = batch_idx * (NUM_KV_HEADS * SEQ_LEN * HEAD_DIM) + 
+
+    const uint k_base_start = batch_idx * (NUM_KV_HEADS * SEQ_LEN * HEAD_DIM) +
                               kv_head_idx * (SEQ_LEN * HEAD_DIM);
-                              
+
     const uint v_base_start = k_base_start;  // Values have same layout as keys
-    
-    const uint mask_base = batch_idx * (NUM_HEADS * SEQ_LEN * SEQ_LEN) + 
-                           head_idx * (SEQ_LEN * SEQ_LEN) + 
+
+    const uint mask_base = batch_idx * (NUM_HEADS * SEQ_LEN * SEQ_LEN) +
+                           head_idx * (SEQ_LEN * SEQ_LEN) +
                            query_pos * SEQ_LEN;
-                           
+
     const uint out_base = q_base;
-    
+
     // Use vector type for query_vec (e.g., float8 or half8 for better SIMD utilization)
     // HEAD_DIM is 128, so 16 vec<T, 8> elements
     vec<T, 8> query_vec_v[HEAD_DIM / 8];
     for (uint d_vec = 0; d_vec < HEAD_DIM / 8; d_vec++) {
         query_vec_v[d_vec] = ((device vec<T, 8>*) (queries + q_base))[d_vec];
     }
-    
+
     // Pass 1: Compute max_score for numerical stability (online max)
     T max_score = T(-INFINITY);
-    
+
     for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
         bool is_valid = use_mask_val ? mask[mask_base + key_pos] : true;
-        
+
         T score;
         if (!is_valid) {
             score = T(-INFINITY); // Masked scores are -infinity, consistent with Pass 2
@@ -124,21 +124,21 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
             // Compute Q @ K^T for this key position using vectorized dot product
             const uint k_base = k_base_start + key_pos * HEAD_DIM;
             score = T(0.0); // Initialize score here
-            
+
             for (uint d_vec = 0; d_vec < HEAD_DIM / 8; d_vec++) { // Use vec<T, 8>
                 score += dot(query_vec_v[d_vec], ((device vec<T, 8>*) (keys + k_base))[d_vec]);
             }
-            
+
             // Apply attention scaling
             score *= scale_val;
         }
         max_score = max(max_score, score);
     }
-    
+
     // Pass 2: Compute softmax denominator and weighted sum (online sum)
     T sum_exp = T(0.0);
     vec<T, 8> output_acc_v[HEAD_DIM / 8]; // Accumulator for output vector, use vec<T, 8>
-    
+
     // Initialize output accumulator to zero
     for (uint d_vec = 0; d_vec < HEAD_DIM / 8; d_vec++) {
         output_acc_v[d_vec] = T(0.0);
@@ -146,7 +146,7 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
 
     for (uint key_pos = 0; key_pos < SEQ_LEN; key_pos++) {
         bool is_valid = use_mask_val ? mask[mask_base + key_pos] : true;
-        
+
         T current_score;
         if (!is_valid) {
             current_score = T(-INFINITY); // Masked scores are -infinity
@@ -168,7 +168,7 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
             exp_score = exp(current_score - max_score);
         }
         sum_exp += exp_score;
-        
+
         // Compute weighted sum of values
         if (exp_score > T(0.0)) { // Only add if exp_score is positive
             const uint v_base = v_base_start + key_pos * HEAD_DIM;
@@ -177,7 +177,7 @@ def qwen3_custom_gqa_attention(queries, keys, values, scale=1.0, mask=None):
             }
         }
     }
-    
+
     // Final normalization and write result to global memory
     if (sum_exp > T(0.0)) {
         for (uint d_vec = 0; d_vec < HEAD_DIM / 8; d_vec++) { // Use vec<T, 8>
@@ -280,16 +280,16 @@ class CustomGQAAttention(nn.Module):
             print("⚠️ Could not import mlx_lm rope_utils, using basic RoPE")
             self.rope = None
 
-        print(f"🔧 Initialized Custom Metal GQA Attention")
+        print("🔧 Initialized Custom Metal GQA Attention")
         print(f"   📊 Architecture: {n_heads}:{n_kv_heads} heads ({n_heads//n_kv_heads}:1 ratio)")
         print(f"   🎯 Head dimension: {head_dim}")
-        print(f"   ⚡ Using custom Metal kernel for GQA optimization")
+        print("   ⚡ Using custom Metal kernel for GQA optimization")
 
     def __call__(
         self,
         x: mx.array,
-        mask: Optional[mx.array] = None,
-        cache: Optional[Any] = None,
+        mask: mx.array | None = None,
+        cache: Any | None = None,
     ) -> mx.array:
         B, L, D = x.shape
 

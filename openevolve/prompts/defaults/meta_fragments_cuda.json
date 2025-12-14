@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "description": "CUDA-specific meta-prompt strategies derived from GB10 evolution logs",
+    "derived_from": "Analysis of cuda_gemm_optimization and cuda_attention_optimization runs",
+    "analysis_date": "2025-12-10"
+  },
+  "strategies": {
+    "fused_operations_fma": {
+      "fragment": "Focus on fusing multiply-add operations using fmaf() intrinsics. Replace separate multiply and add with fused operations to reduce instruction count and improve numerical accuracy. Look for patterns like 'a * b + c' that can become 'fmaf(a, b, c)'.",
+      "tags": ["high_success", "numerical", "performance"],
+      "success_rate": 0.67,
+      "suggested_contexts": ["floating_point", "accumulation"]
+    },
+    "bank_conflict_avoidance": {
+      "fragment": "Add padding to shared memory arrays to avoid bank conflicts. Use stride patterns like 'BLOCK_K + 1' instead of 'BLOCK_K' for shared memory indexing. This eliminates serialization when multiple threads access the same memory bank.",
+      "tags": ["high_success", "shared_memory", "memory"],
+      "success_rate": 0.57,
+      "suggested_contexts": ["shared_memory", "tiled"]
+    },
+    "shared_memory_tiling": {
+      "fragment": "Implement shared memory tiling to reduce global memory bandwidth requirements. Load tiles of input matrices into shared memory, synchronize threads, then compute from the faster shared memory. Consider tile sizes like 128x128 or 64x64 based on shared memory capacity.",
+      "tags": ["medium_success", "memory", "tiling"],
+      "success_rate": 0.56,
+      "suggested_contexts": ["matrix_ops", "bandwidth_bound"]
+    },
+    "vectorized_memory_access": {
+      "fragment": "Use vectorized loads with float4/int4 types or __ldg() intrinsics for read-only data. Vectorized access improves memory bandwidth utilization by loading 4 values per transaction. Ensure proper alignment (16-byte for float4).",
+      "tags": ["medium_success", "memory", "vectorization"],
+      "success_rate": 0.56,
+      "suggested_contexts": ["global_memory", "coalesced"]
+    },
+    "aggressive_loop_unrolling": {
+      "fragment": "Apply #pragma unroll to inner loops, especially the K-dimension loop in matrix operations. Unrolling exposes instruction-level parallelism and allows the compiler to optimize register usage. Consider partial unrolling (e.g., #pragma unroll 4) for very long loops.",
+      "tags": ["medium_success", "compiler", "ilp"],
+      "success_rate": 0.56,
+      "suggested_contexts": ["inner_loops", "compute_bound"]
+    },
+    "register_blocking_8x8": {
+      "fragment": "Have each thread compute multiple output elements (register blocking). An 8x8 tile per thread is often optimal - it increases arithmetic intensity and reduces shared memory traffic. Store partial results in registers and accumulate before writing to global memory.",
+      "tags": ["medium_success", "registers", "blocking"],
+      "success_rate": 0.50,
+      "suggested_contexts": ["gemm", "high_throughput"]
+    },
+    "occupancy_launch_bounds": {
+      "fragment": "Use __launch_bounds__(threads_per_block, min_blocks) to help the compiler optimize register allocation. For compute-bound kernels, limiting occupancy (e.g., 2 blocks per SM) can increase registers per thread and improve performance.",
+      "tags": ["medium_success", "tuning", "occupancy"],
+      "success_rate": 0.50,
+      "suggested_contexts": ["register_pressure", "compute_bound"]
+    },
+    "conservative_tiling_start": {
+      "fragment": "Start with conservative tile sizes (64x64 or smaller) before attempting larger tiles. Larger tiles require more shared memory and registers, which can hurt occupancy. Verify correctness at each step before optimizing further.",
+      "tags": ["safe", "incremental", "tiling"],
+      "success_rate": 0.50,
+      "suggested_contexts": ["new_kernel", "debugging"]
+    },
+    "warp_level_primitives": {
+      "fragment": "Consider warp-level primitives like __shfl_sync() for reductions and data sharing within a warp. Warp shuffles are faster than shared memory for intra-warp communication. Useful for parallel reductions in softmax or normalization.",
+      "tags": ["medium_success", "warp", "reduction"],
+      "success_rate": 0.50,
+      "suggested_contexts": ["reduction", "attention"]
+    },
+    "avoid_prefetching": {
+      "fragment": "CAUTION: Double-buffering and software prefetching showed 0% success rate in our tests. The added complexity often causes correctness issues or register pressure. Only attempt prefetching if simpler optimizations have been exhausted and you have strong evidence it will help.",
+      "tags": ["high_risk", "caution", "memory"],
+      "success_rate": 0.0,
+      "suggested_contexts": ["advanced_only"]
+    },
+    "avoid_tensor_cores_early": {
+      "fragment": "CAUTION: Tensor core (WMMA) implementations showed 0% success rate in early evolution. They require precise data layouts, specific tile sizes, and correct accumulator handling. Only attempt tensor cores after achieving good performance with standard CUDA cores.",
+      "tags": ["high_risk", "caution", "tensor_cores"],
+      "success_rate": 0.0,
+      "suggested_contexts": ["advanced_only", "fp16"]
+    },
+    "memory_coalescing_careful": {
+      "fragment": "CAUTION: Memory coalescing optimizations showed only 33% success rate. While important, aggressive coalescing changes can break correctness. Ensure threads in a warp access contiguous memory addresses, but verify results carefully after changes.",
+      "tags": ["medium_risk", "memory", "correctness"],
+      "success_rate": 0.33,
+      "suggested_contexts": ["memory_bound"]
+    },
+    "online_softmax_flash": {
+      "fragment": "For attention kernels, implement online softmax (FlashAttention style) to avoid materializing the full attention matrix. Compute softmax incrementally as you process K/V tiles, keeping running max and sum. This dramatically reduces memory usage and enables larger sequence lengths.",
+      "tags": ["attention", "memory", "algorithmic"],
+      "success_rate": 0.67,
+      "suggested_contexts": ["attention", "transformer"]
+    },
+    "incremental_complexity": {
+      "fragment": "Add optimizations incrementally, verifying correctness after each change. Start with: 1) Basic tiling, 2) Shared memory, 3) Bank conflict padding, 4) Loop unrolling, 5) Register blocking. Each step should show measurable improvement before proceeding.",
+      "tags": ["safe", "methodology", "debugging"],
+      "success_rate": 0.60,
+      "suggested_contexts": ["any"]
+    }
+  },
+  "contexts": {
+    "low_efficiency": {
+      "efficiency_range": [0.0, 0.1],
+      "description": "Kernel achieving <10% of peak - needs fundamental restructuring"
+    },
+    "medium_efficiency": {
+      "efficiency_range": [0.1, 0.5],
+      "description": "Kernel achieving 10-50% of peak - incremental optimizations"
+    },
+    "high_efficiency": {
+      "efficiency_range": [0.5, 1.0],
+      "description": "Kernel achieving >50% of peak - fine-tuning only"
+    }
+  },
+  "strategy_selection_hints": {
+    "efficiency_below_10pct": [
+      "shared_memory_tiling",
+      "register_blocking_8x8",
+      "conservative_tiling_start"
+    ],
+    "efficiency_10_to_30pct": [
+      "bank_conflict_avoidance",
+      "vectorized_memory_access",
+      "aggressive_loop_unrolling"
+    ],
+    "efficiency_above_30pct": [
+      "fused_operations_fma",
+      "occupancy_launch_bounds",
+      "incremental_complexity"
+    ],
+    "attention_kernels": [
+      "online_softmax_flash",
+      "warp_level_primitives",
+      "shared_memory_tiling"
+    ]
+  }
+}

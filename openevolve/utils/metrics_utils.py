@@ -2,10 +2,10 @@
 Safe calculation utilities for metrics containing mixed types
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def safe_numeric_average(metrics: Dict[str, Any]) -> float:
+def safe_numeric_average(metrics: dict[str, Any]) -> float:
     """
     Calculate the average of numeric values in a metrics dictionary,
     safely ignoring non-numeric values like strings.
@@ -37,7 +37,7 @@ def safe_numeric_average(metrics: Dict[str, Any]) -> float:
     return sum(numeric_values) / len(numeric_values)
 
 
-def safe_numeric_sum(metrics: Dict[str, Any]) -> float:
+def safe_numeric_sum(metrics: dict[str, Any]) -> float:
     """
     Calculate the sum of numeric values in a metrics dictionary,
     safely ignoring non-numeric values like strings.
@@ -67,7 +67,7 @@ def safe_numeric_sum(metrics: Dict[str, Any]) -> float:
 
 
 def get_fitness_score(
-    metrics: Dict[str, Any], feature_dimensions: Optional[List[str]] = None
+    metrics: dict[str, Any], feature_dimensions: list[str] | None = None
 ) -> float:
     """
     Calculate fitness score, excluding MAP-Elites feature dimensions
@@ -114,7 +114,7 @@ def get_fitness_score(
     return safe_numeric_average(fitness_metrics)
 
 
-def format_feature_coordinates(metrics: Dict[str, Any], feature_dimensions: List[str]) -> str:
+def format_feature_coordinates(metrics: dict[str, Any], feature_dimensions: list[str]) -> str:
     """
     Format feature coordinates for display in prompts
 

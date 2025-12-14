@@ -33,7 +33,7 @@ def main():
         print("   Please run AlphaEvolve first.")
         return
 
-    print(f"✅ Found optimized program")
+    print("✅ Found optimized program")
 
     # Test cases
     tests = [

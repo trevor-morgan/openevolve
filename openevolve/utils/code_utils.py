@@ -2,11 +2,13 @@
 Utilities for code parsing, diffing, and manipulation
 """
 
+import logging
 import re
-from typing import Dict, List, Optional, Tuple, Union
+
+logger = logging.getLogger(__name__)
 
 
-def parse_evolve_blocks(code: str) -> List[Tuple[int, int, str]]:
+def parse_evolve_blocks(code: str) -> list[tuple[int, int, str]]:
     """
     Parse evolve blocks from code
 
@@ -60,17 +62,42 @@ def apply_diff(original_code: str, diff_text: str) -> str:
         search_lines = search_text.split("\n")
         replace_lines = replace_text.split("\n")
 
-        # Find where the search pattern starts in the original code
+        match_idx: int | None = None
+
+        # 1) Exact match
         for i in range(len(result_lines) - len(search_lines) + 1):
             if result_lines[i : i + len(search_lines)] == search_lines:
-                # Replace the matched section
-                result_lines[i : i + len(search_lines)] = replace_lines
+                match_idx = i
                 break
+
+        # 2) Whitespace-insensitive match
+        if match_idx is None:
+            normalized_search = [l.strip() for l in search_lines]
+            for i in range(len(result_lines) - len(search_lines) + 1):
+                window = [l.strip() for l in result_lines[i : i + len(search_lines)]]
+                if window == normalized_search:
+                    match_idx = i
+                    break
+
+        # 3) Single-line fallback: find any line with same stripped content
+        if match_idx is None and len(search_lines) == 1:
+            target = search_lines[0].strip()
+            for i, line in enumerate(result_lines):
+                if line.strip() == target:
+                    match_idx = i
+                    break
+
+        if match_idx is not None:
+            result_lines[match_idx : match_idx + len(search_lines)] = replace_lines
+        else:
+            logger.warning(
+                "SEARCH block not found during diff application; leaving code unchanged."
+            )
 
     return "\n".join(result_lines)
 
 
-def extract_diffs(diff_text: str) -> List[Tuple[str, str]]:
+def extract_diffs(diff_text: str) -> list[tuple[str, str]]:
     """
     Extract diff blocks from the diff text
 
@@ -85,7 +112,7 @@ def extract_diffs(diff_text: str) -> List[Tuple[str, str]]:
     return [(match[0].rstrip(), match[1].rstrip()) for match in diff_blocks]
 
 
-def parse_full_rewrite(llm_response: str, language: str = "python") -> Optional[str]:
+def parse_full_rewrite(llm_response: str, language: str = "python") -> str | None:
     """
     Extract a full rewrite from an LLM response
 
@@ -113,7 +140,7 @@ def parse_full_rewrite(llm_response: str, language: str = "python") -> Optional[
     return llm_response
 
 
-def format_diff_summary(diff_blocks: List[Tuple[str, str]]) -> str:
+def format_diff_summary(diff_blocks: list[tuple[str, str]]) -> str:
     """
     Create a human-readable summary of the diff
 
@@ -131,7 +158,7 @@ def format_diff_summary(diff_blocks: List[Tuple[str, str]]) -> str:
 
         # Create a short summary
         if len(search_lines) == 1 and len(replace_lines) == 1:
-            summary.append(f"Change {i+1}: '{search_lines[0]}' to '{replace_lines[0]}'")
+            summary.append(f"Change {i + 1}: '{search_lines[0]}' to '{replace_lines[0]}'")
         else:
             search_summary = (
                 f"{len(search_lines)} lines" if len(search_lines) > 1 else search_lines[0]
@@ -139,7 +166,7 @@ def format_diff_summary(diff_blocks: List[Tuple[str, str]]) -> str:
             replace_summary = (
                 f"{len(replace_lines)} lines" if len(replace_lines) > 1 else replace_lines[0]
             )
-            summary.append(f"Change {i+1}: Replace {search_summary} with {replace_summary}")
+            summary.append(f"Change {i + 1}: Replace {search_summary} with {replace_summary}")
 
     return "\n".join(summary)
 

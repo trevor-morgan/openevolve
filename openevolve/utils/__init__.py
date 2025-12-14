@@ -18,8 +18,8 @@ from openevolve.utils.code_utils import (
     parse_full_rewrite,
 )
 from openevolve.utils.format_utils import (
-    format_metrics_safe,
     format_improvement_safe,
+    format_metrics_safe,
 )
 from openevolve.utils.metrics_utils import (
     safe_numeric_average,
@@ -28,18 +28,18 @@ from openevolve.utils.metrics_utils import (
 
 __all__ = [
     "TaskPool",
-    "gather_with_concurrency",
-    "retry_async",
-    "run_in_executor",
     "apply_diff",
     "calculate_edit_distance",
     "extract_code_language",
     "extract_diffs",
     "format_diff_summary",
+    "format_improvement_safe",
+    "format_metrics_safe",
+    "gather_with_concurrency",
     "parse_evolve_blocks",
     "parse_full_rewrite",
-    "format_metrics_safe",
-    "format_improvement_safe",
+    "retry_async",
+    "run_in_executor",
     "safe_numeric_average",
     "safe_numeric_sum",
 ]

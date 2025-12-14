@@ -1,0 +1,121 @@
+{
+  "strategies": {
+    "algorithmic_restructure": {
+      "fragment": "Consider restructuring the algorithm entirely. Look for opportunities to use different data structures, change the computational approach, or apply well-known algorithmic patterns (divide-and-conquer, dynamic programming, greedy, memoization).",
+      "tags": ["high_risk", "exploration", "algorithmic"],
+      "suggested_contexts": ["low_fitness", "plateau"]
+    },
+    "incremental_refinement": {
+      "fragment": "Make small, targeted improvements to the existing approach. Focus on optimizing constants, simplifying expressions, removing unnecessary computations, or improving edge case handling.",
+      "tags": ["low_risk", "exploitation", "refinement"],
+      "suggested_contexts": ["high_fitness", "near_optimum"]
+    },
+    "vectorization": {
+      "fragment": "Look for opportunities to vectorize operations using NumPy or similar libraries. Eliminate Python loops where possible and leverage SIMD instructions through array operations. Consider broadcasting for element-wise operations.",
+      "tags": ["performance", "numpy", "loops"],
+      "suggested_contexts": ["has_loops", "numerical"]
+    },
+    "memory_optimization": {
+      "fragment": "Focus on memory access patterns and allocation. Consider cache locality, reduce unnecessary allocations, use in-place operations where safe, minimize data copying, and prefer views over copies.",
+      "tags": ["performance", "memory", "cache"],
+      "suggested_contexts": ["large_data", "memory_bound"]
+    },
+    "parallelization": {
+      "fragment": "Identify independent computations that can run in parallel. Consider multiprocessing for CPU-bound work, threading for I/O-bound operations, or vectorized operations that leverage multiple cores.",
+      "tags": ["performance", "parallel", "concurrency"],
+      "suggested_contexts": ["cpu_bound", "independent_ops"]
+    },
+    "simplification": {
+      "fragment": "Simplify the code by removing redundancy, combining similar operations, and using more expressive idioms. Simpler code often performs better and is easier to optimize further.",
+      "tags": ["simplification", "readability", "pythonic"],
+      "suggested_contexts": ["high_complexity", "long_code"]
+    },
+    "mathematical_reformulation": {
+      "fragment": "Look for mathematical identities, algebraic simplifications, or alternative formulations that compute the same result more efficiently. Consider closed-form solutions, approximations, or series expansions.",
+      "tags": ["math", "algebra", "reformulation"],
+      "suggested_contexts": ["numerical", "mathematical"]
+    },
+    "creative_alternative": {
+      "fragment": "Think creatively about completely different approaches. What would an expert in a different field try? Are there unconventional solutions from biology, physics, or other domains worth exploring?",
+      "tags": ["creative", "high_risk", "exploration"],
+      "suggested_contexts": ["plateau", "stuck"]
+    },
+    "hybrid_approach": {
+      "fragment": "Consider combining elements from the top-performing programs. Take the best ideas from each inspiration and synthesize them into a new unified approach that leverages multiple strengths.",
+      "tags": ["synthesis", "combination", "hybrid"],
+      "suggested_contexts": ["diverse_inspirations", "mid_evolution"]
+    },
+    "numerical_stability": {
+      "fragment": "Pay attention to numerical stability. Avoid subtracting similar large numbers, use log-space for products of small numbers, handle edge cases (zeros, infinities, NaN), and consider numerical precision issues.",
+      "tags": ["numerical", "stability", "edge_cases"],
+      "suggested_contexts": ["numerical", "floating_point"]
+    },
+    "error_handling": {
+      "fragment": "Consider edge cases and error conditions. What happens with empty inputs, extreme values, or unexpected data types? Add appropriate validation and graceful handling without sacrificing performance.",
+      "tags": ["robustness", "validation", "edge_cases"],
+      "suggested_contexts": ["unstable", "errors"]
+    },
+    "caching_memoization": {
+      "fragment": "Look for repeated computations that can be cached or memoized. Consider using functools.lru_cache, dictionary-based caching, or precomputing commonly used values.",
+      "tags": ["performance", "caching", "memoization"],
+      "suggested_contexts": ["repeated_calls", "recursive"]
+    },
+    "early_termination": {
+      "fragment": "Look for opportunities to exit early from loops or recursion. Can you detect when the optimal solution has been found? Are there conditions that make further computation unnecessary?",
+      "tags": ["performance", "optimization", "loops"],
+      "suggested_contexts": ["search", "iterative"]
+    },
+    "data_structure_change": {
+      "fragment": "Consider whether a different data structure would be more efficient. Would a set, heap, deque, or specialized structure like a trie or segment tree improve performance for this problem?",
+      "tags": ["data_structures", "algorithmic", "performance"],
+      "suggested_contexts": ["collections", "lookup_heavy"]
+    },
+    "approximation": {
+      "fragment": "If exact computation is expensive, consider approximation algorithms. Would a probabilistic approach, sampling, or bounded error solution be acceptable for this problem?",
+      "tags": ["approximation", "probabilistic", "tradeoff"],
+      "suggested_contexts": ["expensive_exact", "large_scale"]
+    }
+  },
+  "contexts": {
+    "low_fitness": {
+      "fitness_range": [0.0, 0.3],
+      "description": "Program has low fitness, needs significant improvement"
+    },
+    "mid_fitness": {
+      "fitness_range": [0.3, 0.7],
+      "description": "Program has moderate fitness, room for optimization"
+    },
+    "high_fitness": {
+      "fitness_range": [0.7, 1.0],
+      "description": "Program is performing well, fine-tuning may help"
+    },
+    "plateau": {
+      "no_improvement_generations": 10,
+      "description": "Fitness has stagnated, may need new approach"
+    },
+    "early_evolution": {
+      "generation_range": [0, 50],
+      "description": "Early in evolution, exploration is valuable"
+    },
+    "mid_evolution": {
+      "generation_range": [50, 200],
+      "description": "Middle of evolution, balance exploration/exploitation"
+    },
+    "late_evolution": {
+      "generation_range": [200, null],
+      "description": "Late in evolution, exploitation may be more valuable"
+    },
+    "high_complexity": {
+      "complexity_percentile": 0.8,
+      "description": "Code is complex, may benefit from simplification"
+    },
+    "long_code": {
+      "code_length_percentile": 0.8,
+      "description": "Code is lengthy, may have redundancy"
+    }
+  },
+  "meta": {
+    "version": "1.0.0",
+    "description": "Meta-prompt strategies for OpenEvolve evolutionary code optimization"
+  }
+}

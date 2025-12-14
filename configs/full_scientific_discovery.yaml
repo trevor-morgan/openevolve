@@ -1,0 +1,326 @@
+# OpenEvolve Full Scientific Discovery Configuration
+# ==================================================
+# This configuration enables ALL advanced features for open-ended scientific discovery:
+#
+# 1. RL Adaptive Selection - Learns when to explore vs exploit
+# 2. Meta-Prompting - Learns which prompt strategies work best
+# 3. Discovery Mode - Problem evolution, adversarial testing, surprise exploration
+# 4. Heisenberg Engine - Ontological expansion (discovers missing variables)
+#
+# Use this for:
+# - Open-ended optimization where the solution space is unknown
+# - Scientific discovery tasks
+# - Problems where you suspect hidden variables affect fitness
+# - Long-running evolution that might get stuck
+#
+# Usage:
+#   python openevolve-run.py program.py evaluator.py \
+#     --config configs/full_scientific_discovery.yaml \
+#     --iterations 2000
+
+# =============================================================================
+# GENERAL SETTINGS
+# =============================================================================
+
+max_iterations: 2000                 # Long runs for discovery
+checkpoint_interval: 50              # Frequent checkpoints for analysis
+log_level: "INFO"                    # Use DEBUG for detailed discovery logs
+log_dir: null                        # Custom log directory (default: output_dir/logs)
+random_seed: null                    # Random for maximum exploration
+
+# Evolution settings
+diff_based_evolution: true           # Incremental changes
+max_code_length: 50000               # Large programs for complex solutions
+
+# Early stopping - DISABLED for discovery (we want open-ended exploration)
+early_stopping_patience: null
+convergence_threshold: 0.0001
+early_stopping_metric: "combined_score"
+
+# =============================================================================
+# LLM CONFIGURATION
+# =============================================================================
+
+llm:
+  models:
+    - name: "gemini-2.0-flash-lite"
+      weight: 0.5                    # Fast exploration
+    - name: "gemini-2.0-flash"
+      weight: 0.3                    # Balanced
+    - name: "gemini-2.5-pro-preview-06-05"
+      weight: 0.2                    # Deep reasoning for breakthroughs
+
+  evaluator_models:
+    - name: "gemini-2.0-flash"
+      weight: 1.0
+
+  # Higher temperature for creative discovery
+  temperature: 0.85
+  top_p: 0.95
+  max_tokens: 8192
+
+  timeout: 180                       # Longer timeout for complex reasoning
+  retries: 5
+  retry_delay: 5
+
+# =============================================================================
+# PROMPT CONFIGURATION WITH META-PROMPTING
+# =============================================================================
+
+prompt:
+  template_dir: null
+  system_message: |
+    You are a scientific discovery agent. Your goal is to find novel solutions
+    through systematic exploration and hypothesis testing.
+
+    Approach each problem scientifically:
+    1. Observe patterns in successful and failed attempts
+    2. Form hypotheses about what factors drive success
+    3. Design experiments (code changes) to test hypotheses
+    4. Learn from unexpected results - surprises often lead to breakthroughs
+
+    When stuck, consider:
+    - Are there hidden variables we're not considering?
+    - Is the problem framing itself limiting our search?
+    - What would a contrarian approach look like?
+
+  evaluator_system_message: |
+    You are a scientific reviewer evaluating code hypotheses.
+    Focus on: correctness, novelty, and potential for further discovery.
+
+  num_top_programs: 4                # More examples for pattern recognition
+  num_diverse_programs: 4            # More diversity for discovery
+
+  use_template_stochasticity: true
+  template_variations:
+    improvement_suggestion:
+      - "Based on observed patterns, try this approach:"
+      - "Hypothesis: this change should improve fitness because:"
+      - "Exploring a new direction:"
+      - "Counter-intuitive approach to test:"
+      - "What if we tried the opposite of conventional wisdom:"
+
+  # Artifact rendering - crucial for scientific analysis
+  include_artifacts: true
+  max_artifact_bytes: 131072         # 128KB for detailed traces
+  artifact_security_filter: true
+
+  # Feature thresholds
+  suggest_simplification_after_chars: 3000
+  include_changes_under_chars: 300
+  concise_implementation_max_lines: 50
+  comprehensive_implementation_min_lines: 150
+
+  # Meta-prompting - learns which strategies work
+  meta_prompting:
+    enabled: true
+
+    selection_algorithm: "thompson_sampling"
+    thompson_prior_alpha: 1.0
+    thompson_prior_beta: 1.0
+    ucb_exploration_constant: 2.5    # Higher exploration for discovery
+    epsilon: 0.15                    # More random exploration
+
+    reward_type: "improvement"
+    improvement_threshold: 0.0
+
+    meta_prompt_weight: 0.2          # Stronger strategy influence
+    meta_prompt_position: "section"
+
+    per_island_strategies: true
+    context_aware: true
+
+    # Slower decay - keep exploring strategies
+    exploration_decay: 0.998
+    min_exploration: 0.15
+
+    max_history_per_strategy: 2000
+    warmup_iterations: 100           # Longer warmup for discovery
+
+    strategies_file: null            # Use default strategies (or specify custom)
+
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
+
+database:
+  db_path: null
+  in_memory: true
+  log_prompts: true
+
+  population_size: 2000              # Large population for diversity
+  archive_size: 200                  # Large elite archive
+  num_islands: 7                     # Many islands for parallel exploration
+
+  # Migration - less frequent for island independence
+  migration_interval: 100
+  migration_rate: 0.08               # Small migration to preserve diversity
+
+  # Selection ratios (RL will learn to adjust these)
+  elite_selection_ratio: 0.1
+  exploration_ratio: 0.35            # High baseline exploration
+  exploitation_ratio: 0.55
+
+  # Feature dimensions
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+
+  feature_bins: 15                   # Finer grid for discovery
+  diversity_reference_size: 30
+
+# =============================================================================
+# EVALUATOR CONFIGURATION
+# =============================================================================
+
+evaluator:
+  timeout: 600                       # 10 minutes for complex evaluations
+  max_retries: 3
+
+  # Cascade evaluation
+  cascade_evaluation: true
+  cascade_thresholds:
+    - 0.2                            # Stage 1: Basic viability
+    - 0.5                            # Stage 2: Reasonable performance
+    - 0.75                           # Stage 3: Good performance
+
+  parallel_evaluations: 4
+
+  # LLM feedback for scientific insight
+  use_llm_feedback: true
+  llm_feedback_weight: 0.15          # Meaningful contribution
+
+# =============================================================================
+# EVOLUTION TRACE - For Analysis and Offline RL
+# =============================================================================
+
+evolution_trace:
+  enabled: true
+  format: 'jsonl'
+  include_code: true                 # Full code for analysis
+  include_prompts: true              # Full prompts for understanding
+  output_path: null
+  buffer_size: 20
+  compress: false
+
+# =============================================================================
+# RL-BASED ADAPTIVE SELECTION
+# =============================================================================
+
+rl:
+  enabled: true
+
+  algorithm: "contextual_thompson"
+
+  state_features:
+    - "normalized_iteration"
+    - "best_fitness"
+    - "fitness_improvement_rate"
+    - "population_diversity"
+    - "archive_coverage"
+    - "generations_without_improvement"
+    - "recent_exploration_success"
+    - "recent_exploitation_success"
+
+  reward:
+    fitness_weight: 0.5              # Balanced with diversity
+    diversity_weight: 0.25           # High diversity for discovery
+    novelty_weight: 0.15             # Reward novelty
+    efficiency_weight: 0.1
+    improvement_threshold: 0.0
+    plateau_penalty: 0.08            # Penalize stagnation
+    plateau_window: 75
+
+  learning_rate: 0.015
+  discount_factor: 0.97
+  exploration_bonus: 2.0
+
+  warmup_iterations: 150             # Long warmup for complex problems
+  exploration_decay: 0.997           # Very slow decay
+  min_exploration: 0.12              # Always explore
+
+  action_history_size: 100
+  success_window: 25
+
+  per_island_policies: true
+  save_detailed_stats: true
+
+# =============================================================================
+# DISCOVERY MODE
+# =============================================================================
+
+discovery:
+  enabled: true
+  problem_description: null          # SET THIS for your specific problem!
+  # Example: "Find an algorithm that minimizes latency while maintaining accuracy"
+
+  # Problem Evolution
+  # When solutions are found, the problem evolves to become harder
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 3  # Evolve after 3 solutions found
+
+  # Adversarial Skeptic
+  # Actively tries to BREAK programs instead of trusting LLM-as-judge
+  skeptic_enabled: true
+  skeptic:
+    num_attack_rounds: 5             # Thorough adversarial testing
+    attack_timeout: 45.0             # More time per attack
+    enable_blind_reproduction: false # Enable for rigorous testing (expensive)
+    static_analysis_enabled: true    # Check for dangerous patterns
+
+  # Surprise-Based Exploration
+  # Programs that perform unexpectedly get exploration bonuses
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.15     # Lower threshold = more curiosity
+
+  # Solution Detection
+  solution_threshold: 0.85           # 85% to count as "solution"
+
+  # Phenotype Dimensions (behavioral characteristics)
+  phenotype_dimensions:
+    - "complexity"
+    - "efficiency"
+
+  # Logging
+  log_discoveries: true
+  discovery_log_path: null           # Default: output_dir/discoveries.jsonl
+
+  # =========================================================================
+  # HEISENBERG ENGINE - Ontological Expansion
+  # =========================================================================
+  # Detects when optimization is stuck due to MISSING VARIABLES
+  # and discovers new ones through probe synthesis
+  heisenberg:
+    enabled: true
+
+    # Crisis Detection
+    # Detects when we're fundamentally stuck (not just slow progress)
+    min_plateau_iterations: 75       # Wait before detecting plateau
+    fitness_improvement_threshold: 0.0005  # Very small = still improving
+    variance_window: 30              # Window for variance analysis
+    crisis_confidence_threshold: 0.65  # Lower = more sensitive
+    cooldown_iterations: 50          # Wait after handling a crisis
+
+    # Probe Synthesis
+    # LLM generates code to analyze artifacts and discover hidden variables
+    max_probes_per_crisis: 7         # More probes for thorough discovery
+    probe_timeout: 90.0              # Longer timeout for complex probes
+
+    # Validation
+    # Statistical validation of discovered variables
+    validation_trials: 7             # More trials for confidence
+    min_correlation_threshold: 0.55  # Lower threshold = discover more
+
+    # Ontology Limits
+    max_ontology_generations: 15     # Allow many expansions
+    max_variables_per_ontology: 100  # Track many variables
+
+    # Soft Reset
+    # When ontology expands, keep top programs and re-evaluate
+    programs_to_keep_on_reset: 20    # Keep more programs
+
+    # Code Instrumentation
+    # Auto-adds tracing to evolved code for probe analysis
+    auto_instrument: true
+    instrumentation_level: "comprehensive"  # "minimal", "standard", "comprehensive"

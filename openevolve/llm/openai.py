@@ -4,12 +4,10 @@ OpenAI API interface for LLMs
 
 import asyncio
 import logging
-import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import openai
 
-from openevolve.config import LLMConfig
 from openevolve.llm.base import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -20,7 +18,7 @@ class OpenAILLM(LLMInterface):
 
     def __init__(
         self,
-        model_cfg: Optional[dict] = None,
+        model_cfg: dict | None = None,
     ):
         self.model = model_cfg.name
         self.system_message = model_cfg.system_message
@@ -62,7 +60,7 @@ class OpenAILLM(LLMInterface):
         )
 
     async def generate_with_context(
-        self, system_message: str, messages: List[Dict[str, str]], **kwargs
+        self, system_message: str, messages: list[dict[str, str]], **kwargs
     ) -> str:
         """Generate text using a system message and conversational context"""
         # Prepare messages with system message
@@ -90,7 +88,11 @@ class OpenAILLM(LLMInterface):
         # Check if this is an OpenAI reasoning model based on model name pattern
         # This works for all endpoints (OpenAI, Azure, OptiLLM, OpenRouter, etc.)
         model_lower = str(self.model).lower()
-        is_openai_reasoning_model = model_lower.startswith(OPENAI_REASONING_MODEL_PREFIXES) 
+        is_openai_reasoning_model = model_lower.startswith(OPENAI_REASONING_MODEL_PREFIXES)
+
+        # Claude models cannot have both temperature and top_p specified
+        CLAUDE_MODEL_PATTERNS = ("claude-", "claude")
+        is_claude_model = any(pattern in model_lower for pattern in CLAUDE_MODEL_PATTERNS)
 
         if is_openai_reasoning_model:
             # For OpenAI reasoning models
@@ -111,9 +113,15 @@ class OpenAILLM(LLMInterface):
                 "model": self.model,
                 "messages": formatted_messages,
                 "temperature": kwargs.get("temperature", self.temperature),
-                "top_p": kwargs.get("top_p", self.top_p),
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             }
+
+            # Claude models cannot have both temperature and top_p specified
+            # Only add top_p for non-Claude models
+            if not is_claude_model:
+                top_p = kwargs.get("top_p", self.top_p)
+                if top_p is not None:
+                    params["top_p"] = top_p
 
             # Handle reasoning_effort for open source reasoning models.
             reasoning_effort = kwargs.get("reasoning_effort", self.reasoning_effort)
@@ -151,14 +159,14 @@ class OpenAILLM(LLMInterface):
             except Exception as e:
                 if attempt < retries:
                     logger.warning(
-                        f"Error on attempt {attempt + 1}/{retries + 1}: {str(e)}. Retrying..."
+                        f"Error on attempt {attempt + 1}/{retries + 1}: {e!s}. Retrying..."
                     )
                     await asyncio.sleep(retry_delay)
                 else:
-                    logger.error(f"All {retries + 1} attempts failed with error: {str(e)}")
+                    logger.error(f"All {retries + 1} attempts failed with error: {e!s}")
                     raise
 
-    async def _call_api(self, params: Dict[str, Any]) -> str:
+    async def _call_api(self, params: dict[str, Any]) -> str:
         """Make the actual API call"""
         # Use asyncio to run the blocking API call in a thread pool
         loop = asyncio.get_event_loop()

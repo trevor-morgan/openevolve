@@ -14,27 +14,26 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from openevolve.discovery.ontology import (
-    Variable,
-    Ontology,
-    OntologyManager,
-)
-from openevolve.discovery.crisis_detector import (
-    EpistemicCrisis,
-    CrisisDetector,
-    CrisisDetectorConfig,
-)
-from openevolve.discovery.instrument_synthesizer import (
-    Probe,
-    ProbeResult,
-    InstrumentSynthesizer,
-    InstrumentSynthesizerConfig,
-)
 from openevolve.discovery.code_instrumenter import (
     CodeInstrumenter,
     InstrumentationResult,
+)
+from openevolve.discovery.crisis_detector import (
+    CrisisDetector,
+    CrisisDetectorConfig,
+    EpistemicCrisis,
+)
+from openevolve.discovery.instrument_synthesizer import (
+    InstrumentSynthesizer,
+    InstrumentSynthesizerConfig,
+    Probe,
+    ProbeResult,
+)
+from openevolve.discovery.ontology import (
+    Ontology,
+    OntologyManager,
+    Variable,
 )
 
 
@@ -171,7 +170,7 @@ class TestOntologyManager(unittest.TestCase):
         manager.create_genesis_ontology(variable_names=["x", "y"])
         manager.expand_ontology([Variable(name="z", source="probe")])
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             temp_path = f.name
 
         try:
@@ -215,11 +214,7 @@ class TestCrisisDetector(unittest.TestCase):
         # Add stagnating fitness values
         for i in range(20):
             # Small random variation around 0.5
-            detector.record_evaluation(
-                i,
-                {"combined_score": 0.5 + (i % 2) * 0.001},
-                {}
-            )
+            detector.record_evaluation(i, {"combined_score": 0.5 + (i % 2) * 0.001}, {})
 
         crisis = detector.detect_crisis()
 
@@ -329,7 +324,7 @@ class TestInstrumentSynthesizer(unittest.TestCase):
         # Create a simple test probe
         probe = Probe(
             id="test_probe",
-            code='''
+            code="""
 def probe(artifacts, metrics):
     return {
         "discovered_variables": [{
@@ -340,7 +335,7 @@ def probe(artifacts, metrics):
         }],
         "analysis_notes": "Test probe executed"
     }
-''',
+""",
             target_hypothesis="Test",
             probe_type="state",
         )
@@ -374,13 +369,13 @@ class TestCodeInstrumenter(unittest.TestCase):
         """Test minimal instrumentation level"""
         instrumenter = CodeInstrumenter()
 
-        code = '''
+        code = """
 def foo(x):
     return x * 2
 
 def bar(y):
     return foo(y) + 1
-'''
+"""
 
         result = instrumenter.instrument(code, level="minimal")
 
@@ -393,13 +388,13 @@ def bar(y):
         """Test standard instrumentation level"""
         instrumenter = CodeInstrumenter()
 
-        code = '''
+        code = """
 def process(data):
     total = 0
     for item in data:
         total += item
     return total
-'''
+"""
 
         result = instrumenter.instrument(code, level="standard")
 
@@ -411,13 +406,13 @@ def process(data):
         """Test comprehensive instrumentation level"""
         instrumenter = CodeInstrumenter()
 
-        code = '''
+        code = """
 def analyze(x):
     if x > 0:
         return x * 2
     else:
         return 0
-'''
+"""
 
         result = instrumenter.instrument(code, level="comprehensive")
 
@@ -439,7 +434,7 @@ def analyze(x):
         """Test extraction of EVOLVE-BLOCK markers"""
         instrumenter = CodeInstrumenter()
 
-        code = '''
+        code = """
 import something
 
 # EVOLVE-BLOCK-START
@@ -449,7 +444,7 @@ def evolve_me(x):
 
 def other_func():
     pass
-'''
+"""
 
         result = instrumenter.instrument(code, level="minimal", evolve_block_only=True)
 
@@ -542,7 +537,7 @@ class TestHeisenbergIntegration(unittest.TestCase):
                 "fitness_history": detector.fitness_history,
                 "last_crisis_iteration": detector.last_crisis_iteration,
             }
-            with open(crisis_path, 'w') as f:
+            with open(crisis_path, "w") as f:
                 json.dump(crisis_data, f)
 
             # Restore
@@ -553,7 +548,7 @@ class TestHeisenbergIntegration(unittest.TestCase):
             self.assertEqual(len(manager2.ontology_history), 2)
 
             detector2 = CrisisDetector(config)
-            with open(crisis_path, 'r') as f:
+            with open(crisis_path) as f:
                 loaded = json.load(f)
                 detector2.fitness_history = loaded["fitness_history"]
 
@@ -566,18 +561,11 @@ class TestImports(unittest.TestCase):
     def test_discovery_imports(self):
         """Test importing from discovery package"""
         from openevolve.discovery import (
-            Variable,
-            Ontology,
-            OntologyManager,
-            EpistemicCrisis,
-            CrisisDetector,
-            CrisisDetectorConfig,
-            Probe,
-            ProbeResult,
-            InstrumentSynthesizer,
-            InstrumentSynthesizerConfig,
             CodeInstrumenter,
-            InstrumentationResult,
+            CrisisDetector,
+            InstrumentSynthesizer,
+            OntologyManager,
+            Variable,
         )
 
         # All imports should work

@@ -1,0 +1,95 @@
+# OpenEvolve Configuration for CUDA Fused Attention Optimization
+# Target: NVIDIA GB10 (DGX Spark) - Blackwell architecture
+# Goal: FlashAttention-style fused attention for ML training
+
+# General settings
+max_iterations: 100
+checkpoint_interval: 10
+log_level: "INFO"
+
+# Evolution settings
+diff_based_evolution: false  # Full rewrites for kernel restructuring
+
+# LLM Configuration
+llm:
+  models:
+    - name: "claude-opus-4-5-20251101"
+      weight: 0.7
+    - name: "gpt-5.1-codex-max-xhigh"
+      weight: 0.3
+
+  # API configuration (CLIProxyAPI)
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"
+
+  # Generation parameters
+  temperature: 0.8
+  max_tokens: 12000  # Larger for complex attention kernels
+  timeout: 300
+  retries: 3
+  retry_delay: 10
+
+# Prompt configuration
+prompt:
+  system_message: |
+    You are an expert CUDA programmer specializing in high-performance attention mechanisms
+    for transformer models. You are optimizing for NVIDIA GB10 (Blackwell, compute cap 12.1).
+
+    TARGET: Maximize FP16 TFLOP/s for fused self-attention (Q @ K^T -> softmax -> @ V)
+    PEAK: 209 TFLOPS FP16 tensor cores
+
+    Key optimizations to discover (FlashAttention-style):
+
+    1. **Tiling/Blocking**
+       - Tile Q, K, V to fit in shared memory
+       - Process attention in blocks to avoid materializing full seq_len x seq_len matrix
+       - Block sizes: typically 64-128 for Blackwell
+
+    2. **Online Softmax**
+       - Compute softmax incrementally without storing all scores
+       - Track running max and sum for numerical stability
+       - Rescale accumulated outputs when max changes
+
+    3. **Tensor Cores (WMMA/MMA)**
+       - Use wmma::mma_sync for FP16 matrix operations
+       - Fragment sizes: 16x16x16 for FP16
+       - Requires specific memory layouts
+
+    4. **Memory Optimization**
+       - Coalesced loads for Q, K, V (128-byte aligned)
+       - Double buffering for overlapping compute and memory
+       - Minimize shared memory bank conflicts
+
+    5. **Fused Operations**
+       - Fuse scaling (1/sqrt(d)) into Q or scores
+       - Fuse causal masking into score computation
+       - Avoid separate kernel launches
+
+    6. **Register Pressure**
+       - Keep accumulator in registers
+       - Careful about register spilling
+       - Balance occupancy vs registers per thread
+
+    Code must compile with nvcc for sm_121. FP16 operations use cuda_fp16.h.
+    Correctness is critical - attention must produce mathematically correct results.
+
+  num_top_programs: 3
+  num_diverse_programs: 2
+
+# Database / MAP-Elites settings
+database:
+  population_size: 500
+  num_islands: 4
+  migration_interval: 10
+  migration_rate: 0.1
+
+  feature_dimensions:
+    - "complexity"
+    - "diversity"
+  feature_bins: 10
+
+# Evaluator configuration
+evaluator:
+  timeout: 600  # 10 minutes for compilation + benchmarking
+  parallel_evaluations: 1  # Single GPU
+  cascade_evaluation: false

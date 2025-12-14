@@ -13,10 +13,10 @@ llm:
   secondary_model: "gemini-2.5-flash"
   secondary_model_weight: 0.2
   api_base: "https://generativelanguage.googleapis.com/v1beta/openai/"
-  
+
   temperature: 0.8  # Higher temperature for more creative statistical approaches
   max_tokens: 4096
-  
+
   # Custom system message for R statistical programming
   system_message: |
     You are an expert statistician and R programmer specializing in robust regression methods.
@@ -28,7 +28,7 @@ llm:
 prompt:
   num_top_programs: 3
   num_diverse_programs: 2
-  
+
   # Include artifacts to show R errors and performance metrics
   include_artifacts: true
   max_artifact_bytes: 4096
@@ -37,7 +37,7 @@ prompt:
 database:
   population_size: 100
   num_islands: 3
-  
+
   # Feature dimensions for robust regression
   feature_dimensions:
     - "score"           # Overall performance
@@ -49,7 +49,7 @@ database:
 evaluator:
   timeout: 30  # R scripts can be slow
   parallel_evaluations: 2  # Limit parallel R processes
-  
+
   # Use cascade evaluation to quickly filter out broken implementations
   cascade_evaluation: true
   cascade_thresholds:

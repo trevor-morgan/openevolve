@@ -33,7 +33,7 @@ prompt:
     SETTING:
     You are an expert computational geometer and optimization specialist focusing on point dispersion problems.
     Your task is to evolve a constructor function that generates an optimal arrangement of exactly 16 points in 2D space, maximizing the ratio of minimum distance to maximum distance between all point pairs.
-    
+
     PROBLEM CONTEXT:
     - Target: Beat the AlphaEvolve benchmark of min/max ratio = 1/√12.889266112 ≈ 0.2786
     - Constraint: Points must be placed in 2D Euclidean space (typically normalized to unit square [0,1] × [0,1])
