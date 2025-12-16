@@ -125,7 +125,7 @@ def visualize(centers, radii):
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
 
-    fig, ax = plt.subplots(figsize=(8, 8))
+    _fig, ax = plt.subplots(figsize=(8, 8))
 
     # Draw unit square
     ax.set_xlim(0, 1)

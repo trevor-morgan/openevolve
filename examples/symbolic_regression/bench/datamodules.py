@@ -28,7 +28,7 @@ class TransformedFeynmanDataModule:
             for e in ds:
                 samples = {
                     k: v[...].astype(np.float64)
-                    for k, v in sample_file[f'/lsr_transform/{e["name"]}'].items()
+                    for k, v in sample_file[f"/lsr_transform/{e['name']}"].items()
                 }
                 self.problems.append(
                     Problem(
@@ -89,7 +89,7 @@ class BaseSynthDataModule:
                 samples = {
                     k: v[...].astype(np.float64)
                     for k, v in sample_file[
-                        f'/lsr_synth/{self._dataset_identifier}/{e["name"]}'
+                        f"/lsr_synth/{self._dataset_identifier}/{e['name']}"
                     ].items()
                 }
                 self.problems.append(

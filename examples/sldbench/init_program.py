@@ -10,12 +10,12 @@ from scipy.optimize import minimize
 
 def scaling_law_func(data_points, params):
     X = np.atleast_2d(np.asarray(data_points))  # (N, F)
-    N, F = X.shape
+    _N, F = X.shape
     params = np.asarray(params)
 
     if params.ndim == 1:
         params = params[None, :]  # (1, P)
-    T, P = params.shape
+    _T, _P = params.shape
 
     coeffs = params[:, :F]  # (T, F)
     exponents = params[:, F : 2 * F]  # (T, F)
@@ -31,7 +31,7 @@ def scaling_law_func(data_points, params):
 def fit_scaling_law(data_points, loss_values):
     X = np.atleast_2d(np.asarray(data_points))  # (N, F)
     y = np.asarray(loss_values)
-    N, F = X.shape
+    _N, F = X.shape
     P = 2 * F + 1
 
     if y.ndim == 1:

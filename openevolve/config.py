@@ -341,6 +341,12 @@ class DatabaseConfig:
     embedding_model: str | None = None
     similarity_threshold: float = 0.99
 
+    # Vector Database
+    vector_store_type: str = "memory"  # Options: "memory", "milvus"
+    milvus_host: str = "localhost"
+    milvus_port: str = "19530"
+    milvus_collection: str = "openevolve_programs"
+
 
 def _clear_legacy_llm_fields(llm_dict: dict[str, Any]) -> dict[str, Any]:
     """Prevent LLMConfig __post_init__ from duplicating models during roundtrips."""
@@ -387,6 +393,9 @@ class EvaluatorConfig:
     # Artifact handling
     enable_artifacts: bool = True
     max_artifact_storage: int = 100 * 1024 * 1024  # 100MB per program
+
+    # Dependency management
+    auto_install_dependencies: bool = False  # Automatically install missing dependencies
 
 
 @dataclass
@@ -563,6 +572,10 @@ class SkepticConfig:
     # Optional task-specific skeptic plugins.
     plugins: list[str] = field(default_factory=list)
 
+    # Test harness defaults
+    default_atol: float = 1e-3  # Default absolute tolerance for numeric comparisons
+    default_rtol: float = 0.0  # Default relative tolerance for numeric comparisons
+
 
 @dataclass
 class HeisenbergConfig:
@@ -606,6 +619,93 @@ class HeisenbergConfig:
     auto_instrument: bool = True  # Auto-instrument code to capture traces
     instrumentation_level: str = "standard"  # "minimal", "standard", "comprehensive"
 
+    # Collaborative Discovery - Multi-Agent Novel Physics Generation
+    collaborative_discovery_enabled: bool = False  # Use agent debate instead of probes
+    max_debate_rounds: int = 5  # Number of debate rounds between agents
+    min_consensus_for_synthesis: float = 0.6  # Agreement needed to synthesize
+    elimination_threshold: float = 0.3  # Ideas below this confidence are dropped
+
+    # Domain context for collaborative agents (auto-extracted from problem description if not set)
+    domain_context: str | None = None
+
+
+@dataclass
+class GoldenPathConfig:
+    """Configuration for the Golden Path - Autonomous Ontological Discovery
+
+    The Golden Path framework enables TRUE ontological discovery - finding hidden
+    variables and patterns that don't exist in the current representation.
+
+    Unlike parameter optimization, the Golden Path discovers NEW dimensions
+    of the problem space through:
+    - Prescience: Crisis detection (sees when evolution hits true walls)
+    - Mentat: Program mining (extracts patterns from successful programs)
+    - SietchFinder: Hidden variable discovery (proposes new dimensions)
+    - GomJabbar: Validation (tests if discoveries are real)
+    - SpiceAgony: Integration (adds validated variables to the system)
+
+    Named after Dune's Golden Path - the prescient vision that requires
+    seeing beyond what is currently visible.
+    """
+
+    # Enable/disable
+    enabled: bool = False
+
+    # Prescience (Crisis Detection) settings
+    prescience_short_window: int = 10  # Recent history for gradient
+    prescience_medium_window: int = 30  # Medium-term trends
+    prescience_long_window: int = 100  # Long-term pattern analysis
+    gradient_threshold: float = 0.001  # Below this = stagnant
+    variance_threshold: float = 0.0001  # Below this = clustered
+    diversity_threshold: float = 0.3  # Below this = converged
+
+    # Mentat (Pattern Mining) settings
+    min_programs_for_analysis: int = 20  # Need this many programs to mine
+    top_n_patterns: int = 10  # Keep top N patterns
+    min_correlation_threshold: float = 0.3  # Minimum correlation to consider
+    min_discriminative_power: float = 0.2  # Minimum effect size
+
+    # SietchFinder (Hidden Variable Discovery) settings
+    max_hypotheses_per_round: int = 5  # Max hidden variables to propose
+    use_pattern_mining: bool = True  # Derive variables from patterns
+    use_llm_hypothesis: bool = True  # Use LLM to propose variables
+    use_domain_templates: bool = True  # Apply domain-specific templates
+
+    # GomJabbar (Validation) settings
+    validation_min_correlation: float = 0.15  # Minimum correlation to validate
+    validation_max_p_value: float = 0.05  # Maximum p-value for significance
+    validation_min_incremental_r2: float = 0.02  # Minimum improvement
+    validation_cv_folds: int = 5  # Cross-validation folds
+    validation_bootstrap_iterations: int = 100  # Bootstrap iterations for CI
+
+    # SpiceAgony (Integration) settings
+    auto_integrate: bool = True  # Automatically integrate validated variables
+    default_variable_weight: float = 0.1  # Weight in final score for new vars
+    backup_before_modify: bool = True  # Backup evaluator before modification
+
+    # Orchestration settings
+    min_programs_for_discovery: int = 30  # Need this many before activating
+    max_discovery_rounds: int = 5  # Maximum discovery rounds
+    cooldown_after_discovery: int = 20  # Iterations to wait after discovery
+
+    # Output settings
+    save_discoveries_to_file: bool = True  # Export discovered variables
+    discoveries_output_path: str = "golden_path_discoveries.py"
+
+
+@dataclass
+class EpistemicArchiveConfig:
+    """Configuration for Epistemic Archive (Behavioral Diversity)"""
+
+    # Frontier settings for curiosity sampling
+    frontier_threshold_high: float = 0.7  # High bin index threshold
+    frontier_threshold_low: float = 0.3  # Low bin index threshold
+    frontier_bonus: float = 0.5  # Curiosity score bonus for frontier programs
+
+    # Fitness prediction settings
+    prediction_prior_mean: float = 0.5  # Prior mean for fitness prediction
+    prediction_prior_weight: float = 2.0  # Weight of prior in Bayesian update
+
 
 @dataclass
 class DiscoveryConfig:
@@ -647,8 +747,10 @@ class DiscoveryConfig:
     surprise_tracking_enabled: bool = True
     curiosity_sampling_enabled: bool = True
     phenotype_dimensions: list[str] = field(default_factory=lambda: ["complexity", "efficiency"])
+    phenotype_bins: int = 10  # Number of bins for phenotype grid discretization
     # Optional phenotype dimensions to mirror into program metrics for MAP-Elites.
     phenotype_feature_dimensions: list[str] = field(default_factory=list)
+    epistemic_archive: EpistemicArchiveConfig = field(default_factory=EpistemicArchiveConfig)
 
     # Thresholds
     solution_threshold: float = 0.8  # Fitness threshold to consider problem "solved"
@@ -660,6 +762,9 @@ class DiscoveryConfig:
 
     # Heisenberg Engine (Ontological Expansion)
     heisenberg: HeisenbergConfig = field(default_factory=HeisenbergConfig)
+
+    # Golden Path (Autonomous Ontological Discovery)
+    golden_path: GoldenPathConfig = field(default_factory=GoldenPathConfig)
 
 
 @dataclass
@@ -772,6 +877,14 @@ class Config:
             # Handle nested heisenberg config
             if "heisenberg" in discovery_dict:
                 discovery_dict["heisenberg"] = HeisenbergConfig(**discovery_dict["heisenberg"])
+            # Handle nested golden_path config
+            if "golden_path" in discovery_dict:
+                discovery_dict["golden_path"] = GoldenPathConfig(**discovery_dict["golden_path"])
+            # Handle nested epistemic_archive config
+            if "epistemic_archive" in discovery_dict:
+                discovery_dict["epistemic_archive"] = EpistemicArchiveConfig(
+                    **discovery_dict["epistemic_archive"]
+                )
             config.discovery = DiscoveryConfig(**discovery_dict)
 
         return config

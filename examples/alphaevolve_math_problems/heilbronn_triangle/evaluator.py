@@ -72,7 +72,7 @@ def evaluate(program_path: str):
             points = np.array(points)
 
         if points.shape != (NUM_POINTS, 2):
-            raise ValueError(f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS,2)}")
+            raise ValueError(f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS, 2)}")
 
         check_inside_triangle_wtol(points, TOL)
 

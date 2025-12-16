@@ -184,7 +184,7 @@ class CodeInstrumenter:
 
             # Find evolve block if requested
             if evolve_block_only:
-                code, block_start, block_end = self._extract_evolve_block(code)
+                code, block_start, _block_end = self._extract_evolve_block(code)
                 if block_start == -1:
                     # No evolve block, instrument entire code
                     evolve_block_only = False

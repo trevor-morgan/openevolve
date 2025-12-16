@@ -298,9 +298,9 @@ def run_comparison_test(
     prompt: str, custom_attention_class, max_tokens: int = 1000, debug: bool = False
 ):
     """Run comparison test between standard and optimized attention"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("🔬 ATTENTION COMPARISON TEST")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Prompt: {prompt}")
     print(f"Max tokens: {max_tokens}")
     print()
@@ -486,7 +486,7 @@ def main():
     # Run comparison test
     run_comparison_test(args.prompt, custom_attention_class, args.max_tokens, debug=args.debug)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("✅ Test completed!")
     print("💡 To test with a different prompt:")
     print(f"   python {sys.argv[0]} --prompt 'Your custom prompt here'")

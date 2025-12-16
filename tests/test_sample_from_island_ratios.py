@@ -79,7 +79,7 @@ class TestSampleFromIslandRatios(unittest.TestCase):
             # Reset seed to get same rand_val in sample_from_island
             random.seed(random.getstate()[1][0])  # Use current state
 
-            parent, inspirations = self.db.sample_from_island(island_id=0)
+            _parent, _inspirations = self.db.sample_from_island(island_id=0)
 
             # Determine which mode should have been used based on rand_val
             if rand_val < self.db.config.exploration_ratio:
@@ -240,7 +240,7 @@ class TestSampleFromIslandEdgeCases(unittest.TestCase):
             self.db.add(program, target_island=0)
 
         # Try to sample from empty island 1
-        parent, inspirations = self.db.sample_from_island(island_id=1)
+        parent, _inspirations = self.db.sample_from_island(island_id=1)
 
         # Should still return a parent (from fallback)
         self.assertIsNotNone(parent)
@@ -268,7 +268,7 @@ class TestSampleFromIslandEdgeCases(unittest.TestCase):
         self.db.archive.clear()
 
         # Sample should still work (fall back to weighted sampling)
-        parent, inspirations = self.db.sample_from_island(island_id=0)
+        parent, _inspirations = self.db.sample_from_island(island_id=0)
         self.assertIsNotNone(parent)
 
     def test_single_program_island(self):

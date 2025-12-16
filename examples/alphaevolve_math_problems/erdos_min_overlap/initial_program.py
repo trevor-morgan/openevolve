@@ -68,7 +68,7 @@ class ErdosOptimizer:
 
         print(f"Optimizing a step function with {self.hypers.num_intervals} intervals...")
         for step in tqdm.tqdm(range(self.hypers.num_steps), desc="Optimizing"):
-            latent_h_values, opt_state, loss = train_step(latent_h_values, opt_state)
+            latent_h_values, opt_state, _loss = train_step(latent_h_values, opt_state)
 
         # Final h is just the sigmoid of the latent values
         final_h = jax.nn.sigmoid(latent_h_values)

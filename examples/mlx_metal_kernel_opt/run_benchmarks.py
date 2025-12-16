@@ -439,9 +439,9 @@ def print_comparison_summary(comparison_results):
         print("❌ No comparison results to display")
         return
 
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print(f"{'🚀 OPENEVOLVE CUSTOM METAL KERNEL OPTIMIZATION RESULTS':^100}")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
 
     summary = comparison_results["summary"]
     total_tests = comparison_results["total_comparisons"]
@@ -468,14 +468,14 @@ def print_comparison_summary(comparison_results):
     )
 
     print("\n📊 DETAILED BENCHMARK COMPARISON:")
-    print(f"{'='*110}")
+    print(f"{'=' * 110}")
     print(
         f"{'Benchmark':<30} {'Standard':<12} {'Optimized':<12} {'Decode':<12} {'Memory':<12} {'Time':<12}"
     )
     print(
         f"{'Name':<30} {'Decode':<12} {'Decode':<12} {'Improv(%)':<12} {'Reduct(%)':<12} {'Reduct(%)':<12}"
     )
-    print(f"{'-'*110}")
+    print(f"{'-' * 110}")
 
     for comp in sorted(
         comparison_results["individual_comparisons"],
@@ -503,7 +503,7 @@ def print_comparison_summary(comparison_results):
             f"{marker} {name:<28} {std_decode:<12.1f} {opt_decode:<12.1f} {decode_imp:+<12.1f} {mem_imp:+<12.1f} {time_imp:+<12.1f}"
         )
 
-    print(f"{'-'*110}")
+    print(f"{'-' * 110}")
 
     # Highlight best and worst improvements
     best_decode = max(
@@ -571,10 +571,10 @@ def print_comparison_summary(comparison_results):
         print("  4. Consider contributing Metal kernel optimization back to MLX")
         print("  5. Explore similar Metal kernel strategies for other attention patterns")
 
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print("🔬 Comprehensive analysis complete! Results saved to comparison files.")
     print("💡 This represents a genuine Metal kernel discovery by OpenEvolve.")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
 
 
 def main():

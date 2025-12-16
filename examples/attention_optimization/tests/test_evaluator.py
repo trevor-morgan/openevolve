@@ -139,7 +139,7 @@ def main():
         results.append((test_name, success))
 
     # Summary
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("TEST SUMMARY")
     print("=" * 50)
 

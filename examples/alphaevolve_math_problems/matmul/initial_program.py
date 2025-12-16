@@ -124,7 +124,7 @@ def run():
     main_key = jax.random.PRNGKey(42)
 
     # --- PHASE 1: CONTINUOUS EXPLORATION ---
-    print(f"\n{'='*20} PHASE 1: Continuous Exploration {'='*20}")
+    print(f"\n{'=' * 20} PHASE 1: Continuous Exploration {'=' * 20}")
     best_loss_phase1 = float("inf")
     best_latent_decomp = None
 
@@ -134,7 +134,7 @@ def run():
     jit_train_step_continuous = jax.jit(train_step, static_argnums=(2, 3))
 
     for i in range(hypers.num_restarts):
-        print(f"\n--- Restart {i+1}/{hypers.num_restarts} ---")
+        print(f"\n--- Restart {i + 1}/{hypers.num_restarts} ---")
         main_key, restart_key = jax.random.split(main_key)
         init_fn = jax.nn.initializers.normal(stddev=hypers.init_scale)
         latent_decomp = (
@@ -166,7 +166,7 @@ def run():
             best_latent_decomp = latent_decomp
 
     # --- PHASE 2: DISCRETE FINE-TUNING ---
-    print(f"\n{'='*20} PHASE 2: Discrete Fine-tuning (STE) {'='*20}")
+    print(f"\n{'=' * 20} PHASE 2: Discrete Fine-tuning (STE) {'=' * 20}")
     print(f"Starting with best continuous solution (loss: {best_loss_phase1:.8f})")
 
     continuous_params = continuous_optimizer._get_constrained_decomposition(best_latent_decomp)
@@ -182,7 +182,7 @@ def run():
             continuous_params, opt_state, discrete_optimizer.opt, discrete_optimizer._loss_fn
         )
         if (step + 1) % 2000 == 0:
-            print(f"Step {step+1} | Discrete Loss: {loss:.8f}")
+            print(f"Step {step + 1} | Discrete Loss: {loss:.8f}")
         if loss < 1e-7:
             print("\nFound a perfect solution!")
             break

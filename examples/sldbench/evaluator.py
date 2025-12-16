@@ -323,7 +323,7 @@ if __name__ == "__main__":
         nmae_vals = final_results["nmae_per_dim"]
         r2_vals = final_results["r2_per_dim"]
         for i, (nmse_d, nmae_d, r2_d) in enumerate(zip(nmse_vals, nmae_vals, r2_vals)):
-            print(f"    Dim {i+1}: NMSE={nmse_d:.4f}, NMAE={nmae_d:.4f}, R²={r2_d:.4f}")
+            print(f"    Dim {i + 1}: NMSE={nmse_d:.4f}, NMAE={nmae_d:.4f}, R²={r2_d:.4f}")
 
     params = final_results.get("fitted_params", {})
     if params:

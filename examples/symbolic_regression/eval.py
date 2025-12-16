@@ -217,7 +217,7 @@ def evaluation(
         f"Starting optimization for {program_path} with {num_attempts} attempts (num_params: {num_params_to_optimize})..."
     )
     for i in range(num_attempts):
-        print(f"Attempt {i+1}/{num_attempts}")
+        print(f"Attempt {i + 1}/{num_attempts}")
         initial_params = np.random.rand(num_params_to_optimize)
         try:
             optimization_result = minimize(
@@ -228,27 +228,29 @@ def evaluation(
                 # options={'maxiter': 1000, 'disp': False} # Example options
             )
             if optimization_result.success:
-                print(f"Attempt {i+1} successful. Func value: {optimization_result.fun}")
+                print(f"Attempt {i + 1} successful. Func value: {optimization_result.fun}")
                 if optimization_result.fun < best_func_value:
                     best_func_value = optimization_result.fun
                     optimized_params = optimization_result.x
-                    print(f"New best result found in attempt {i+1}. Func value: {best_func_value}")
+                    print(
+                        f"New best result found in attempt {i + 1}. Func value: {best_func_value}"
+                    )
             else:
                 print(
-                    f"Warning: Optimization attempt {i+1} did not converge. Message: {optimization_result.message}. Func value: {optimization_result.fun}"
+                    f"Warning: Optimization attempt {i + 1} did not converge. Message: {optimization_result.message}. Func value: {optimization_result.fun}"
                 )
                 if (
                     optimization_result.fun < best_func_value
                 ):  # Still consider if it's the best so far
                     print(
-                        f"Non-converged result from attempt {i+1} is an improvement. Func value: {optimization_result.fun}"
+                        f"Non-converged result from attempt {i + 1} is an improvement. Func value: {optimization_result.fun}"
                     )
                     best_func_value = optimization_result.fun
                     optimized_params = optimization_result.x
 
         except Exception as e:
             optimization_critical_error_msg = (
-                f"Critical error during optimization attempt {i+1} for {program_path}: {e!s}"
+                f"Critical error during optimization attempt {i + 1} for {program_path}: {e!s}"
             )
             print(f"Error: {optimization_critical_error_msg}")
             break

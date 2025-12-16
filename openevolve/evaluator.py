@@ -21,6 +21,7 @@ from openevolve.evaluation_result import EvaluationResult
 from openevolve.llm.ensemble import LLMEnsemble
 from openevolve.prompt.sampler import PromptSampler
 from openevolve.utils.async_utils import TaskPool
+from openevolve.utils.dependency_manager import DependencyManager
 from openevolve.utils.format_utils import format_metrics_safe
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,11 @@ class Evaluator:
         self.llm_ensemble = llm_ensemble
         self.prompt_sampler = prompt_sampler
         self.database = database
+
+        # Initialize dependency manager
+        self.dependency_manager = DependencyManager(
+            getattr(config, "auto_install_dependencies", False)
+        )
 
         # Create a task pool for parallel evaluation
         self.task_pool = TaskPool(max_concurrency=config.parallel_evaluations)
@@ -198,6 +204,10 @@ class Evaluator:
         """
         start_time = time.time()
         program_id_str = f" {program_id}" if program_id else ""
+
+        # Check dependencies if enabled
+        # We do this before creating the temp file to ensure environment is ready
+        self.dependency_manager.check_and_install(program_code)
 
         # Check if artifacts are enabled
         artifacts_enabled = os.environ.get("ENABLE_ARTIFACTS", "true").lower() == "true"

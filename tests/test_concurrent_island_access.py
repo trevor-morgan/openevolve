@@ -66,7 +66,7 @@ class TestConcurrentIslandAccess(unittest.TestCase):
 
                 # Try to sample
                 try:
-                    parent, inspirations = self.database.sample(num_inspirations=2)
+                    parent, _inspirations = self.database.sample(num_inspirations=2)
 
                     # Check if we got programs from the correct island
                     actual_island = parent.metadata.get("island", -1)
@@ -128,7 +128,7 @@ class TestConcurrentIslandAccess(unittest.TestCase):
 
         for island_id in range(5):
             try:
-                parent, inspirations = self.database.sample_from_island(
+                parent, _inspirations = self.database.sample_from_island(
                     island_id, num_inspirations=2
                 )
                 actual_island = parent.metadata.get("island", -1)
@@ -206,7 +206,7 @@ class TestConcurrentIslandAccess(unittest.TestCase):
             """Use the safe sampling method"""
             try:
                 # No state modification needed!
-                parent, inspirations = self.database.sample_from_island(
+                parent, _inspirations = self.database.sample_from_island(
                     island_id, num_inspirations=2
                 )
 

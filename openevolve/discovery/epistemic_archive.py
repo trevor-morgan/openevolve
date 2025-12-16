@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from openevolve.config import EpistemicArchiveConfig
+
 if TYPE_CHECKING:
     from openevolve.database import Program, ProgramDatabase
 
@@ -287,9 +289,11 @@ class EpistemicArchive:
         custom_phenotype_extractor: Any | None = None,
         mirror_dimensions: list[str] | None = None,
         num_bins: int = 10,
+        config: EpistemicArchiveConfig = None,
     ):
         self.database = database
         self.num_bins = num_bins
+        self.config = config or EpistemicArchiveConfig()
         self.phenotype_dimensions = phenotype_dimensions or ["complexity", "efficiency"]
         self.phenotype_extractor = PhenotypeExtractor(num_bins)
         self.custom_phenotype_extractor = custom_phenotype_extractor
@@ -542,8 +546,8 @@ class EpistemicArchive:
             fitness_sum = float(approach.get("fitness_sum", 0.0))
             if count > 0:
                 # Shrink mean toward a neutral prior to avoid early saturation.
-                prior_mean = 0.5
-                prior_weight = 2.0
+                prior_mean = self.config.prediction_prior_mean
+                prior_weight = self.config.prediction_prior_weight
                 mean = (fitness_sum + prior_mean * prior_weight) / (count + prior_weight)
                 return float(np.clip(mean, 0.0, 1.0))
 
@@ -646,10 +650,14 @@ class EpistemicArchive:
             # Factor 3: Frontier programs (high in one dimension, low in another)
             complexity = phenotype.get("complexity", 0)
             efficiency = phenotype.get("efficiency", 0)
-            if (complexity > self.num_bins * 0.7 and efficiency < self.num_bins * 0.3) or (
-                complexity < self.num_bins * 0.3 and efficiency > self.num_bins * 0.7
+            if (
+                complexity > self.num_bins * self.config.frontier_threshold_high
+                and efficiency < self.num_bins * self.config.frontier_threshold_low
+            ) or (
+                complexity < self.num_bins * self.config.frontier_threshold_low
+                and efficiency > self.num_bins * self.config.frontier_threshold_high
             ):
-                score += 0.5  # Bonus for frontier programs
+                score += self.config.frontier_bonus  # Bonus for frontier programs
 
             scored.append((program, score))
 
@@ -697,6 +705,20 @@ class EpistemicArchive:
                 "phenotype_dimensions": self.phenotype_dimensions.copy(),
             }
         )
+
+        # Update the underlying database to use the new dimensions
+        # This dynamically re-bins the MAP-Elites grid to explore the new dimensions
+        if hasattr(self.database, "update_feature_dimensions"):
+            # Combine config dimensions with our phenotype dimensions
+            # We want to preserve built-ins but add our discovered vars
+            base_dims = [
+                d for d in self.database.config.feature_dimensions if not d.startswith("var_")
+            ]
+            # Filter phenotype dims to only include variables
+            var_dims = [d for d in self.phenotype_dimensions if d.startswith("var_")]
+
+            new_db_dims = base_dims + var_dims
+            self.database.update_feature_dimensions(new_db_dims)
 
         logger.info(
             f"Updated archive for ontology generation {ontology_generation}, "

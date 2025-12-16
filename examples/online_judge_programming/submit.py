@@ -424,7 +424,7 @@ def show_judgement(submission_url, cfg):
                 if status_id == _RUNNING_STATUS:
                     progress = progress[: 10 * (testcases_done - 1)] + color("?", _YELLOW_COLOR)
                 print(
-                    f'[{progress}{" " * (9*testcases_done + testcases_total - len(progress))}]  {testcases_done} / {testcases_total}',
+                    f"[{progress}{' ' * (9 * testcases_done + testcases_total - len(progress))}]  {testcases_done} / {testcases_total}",
                     end="",
                 )
 

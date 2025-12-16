@@ -83,14 +83,14 @@ class MLIRLoweringPipeline:
         successful_sequences = []
 
         for i, passes in enumerate(pass_sequences):
-            print(f"\n📋 Testing sequence {i+1}: {' → '.join(passes)}")
+            print(f"\n📋 Testing sequence {i + 1}: {' → '.join(passes)}")
 
             success = self.test_pass_sequence(input_file, passes)
             if success:
                 successful_sequences.append(passes)
-                print(f"   ✅ Sequence {i+1} works!")
+                print(f"   ✅ Sequence {i + 1} works!")
             else:
-                print(f"   ❌ Sequence {i+1} failed")
+                print(f"   ❌ Sequence {i + 1} failed")
 
         return successful_sequences
 

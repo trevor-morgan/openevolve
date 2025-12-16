@@ -353,14 +353,14 @@ def main():
     # Store results
     all_results = []
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"PROMPT EVALUATION - {args.prompt_type.upper()}")
     print(f"Model: {args.model}")
     if args.samples:
         print(f"Samples per dataset: {args.samples}")
     else:
         print("Samples per dataset: Full dataset")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for dataset_name in datasets:
         print(f"\nEvaluating {dataset_name.upper()}...")
@@ -407,7 +407,7 @@ def main():
                 print(f"  Baseline: {baseline_acc:.3f}")
                 print(f"  Improvement: {improvement:+.1f}%")
             print(f"  Empty responses: {empty_responses}")
-            print(f"  Time: {elapsed_time:.1f}s ({elapsed_time/total:.1f}s per sample)")
+            print(f"  Time: {elapsed_time:.1f}s ({elapsed_time / total:.1f}s per sample)")
 
         except Exception as e:
             print(f"Error evaluating {dataset_name}: {e!s}")
@@ -452,9 +452,9 @@ def main():
         json.dump(final_results, f, indent=2)
 
     # Print summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("EVALUATION SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for result in all_results:
         if "error" not in result:

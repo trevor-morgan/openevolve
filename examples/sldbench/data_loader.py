@@ -22,8 +22,8 @@ TASK_SCHEMA_MAP = {
         "target_name": "loss",
     },
     "domain_mixture_scaling_law": {
-        "feature_names": [f"proportion_domain_{i+1}" for i in range(5)],
-        "target_name": [f"loss_domain_{i+1}" for i in range(5)],
+        "feature_names": [f"proportion_domain_{i + 1}" for i in range(5)],
+        "target_name": [f"loss_domain_{i + 1}" for i in range(5)],
     },
     "lr_bsz_scaling_law": {
         "feature_names": ["lr", "bsz", "data_size", "non_embedding_param_size"],

@@ -225,7 +225,7 @@ class AdversarialSkeptic:
             max_r = max(min_r, max_r)
             f = min(max(float(fitness), 0.0), 1.0)
             scaled = min_r + (max_r - min_r) * f
-            num_rounds = int(round(scaled))
+            num_rounds = round(scaled)
 
         # Run any plugin-provided attacks once up front.
         for plugin in self.plugins:
@@ -247,7 +247,7 @@ class AdversarialSkeptic:
                 self.attack_history.append(result)
                 if not result.survived:
                     logger.info(
-                        f"Program {program.id} FALSIFIED by plugin {plugin_name} ({attack.get('attack_type','plugin')})"
+                        f"Program {program.id} FALSIFIED by plugin {plugin_name} ({attack.get('attack_type', 'plugin')})"
                     )
                     return False, results
             if plugin_attacks:
@@ -812,7 +812,7 @@ class AdversarialSkeptic:
                 "        except Exception:",
                 "            return float(default)",
                 "",
-                "    def _assert_close(a, b, keys=None, atol=1e-3, rtol=0.0):",
+                f"    def _assert_close(a, b, keys=None, atol={self.config.default_atol}, rtol={self.config.default_rtol}):",
                 "        ma = _numeric_metrics(a)",
                 "        mb = _numeric_metrics(b)",
                 "        if keys is None:",
@@ -845,8 +845,8 @@ class AdversarialSkeptic:
                 "        test_name = str(spec.get('test') or '')",
                 "        base_kwargs = spec.get('base') or {}",
                 "        seed = spec.get('seed')",
-                "        atol = spec.get('atol', 1e-3)",
-                "        rtol = spec.get('rtol', 0.0)",
+                f"        atol = spec.get('atol', {self.config.default_atol})",
+                f"        rtol = spec.get('rtol', {self.config.default_rtol})",
                 "        keys = spec.get('metrics')",
                 "        fn, fn_name = _resolve_target()",
                 "        if fn is None:",

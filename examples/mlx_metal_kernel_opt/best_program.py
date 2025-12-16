@@ -281,7 +281,7 @@ class CustomGQAAttention(nn.Module):
             self.rope = None
 
         print("🔧 Initialized Custom Metal GQA Attention")
-        print(f"   📊 Architecture: {n_heads}:{n_kv_heads} heads ({n_heads//n_kv_heads}:1 ratio)")
+        print(f"   📊 Architecture: {n_heads}:{n_kv_heads} heads ({n_heads // n_kv_heads}:1 ratio)")
         print(f"   🎯 Head dimension: {head_dim}")
         print("   ⚡ Using custom Metal kernel for GQA optimization")
 
@@ -291,7 +291,7 @@ class CustomGQAAttention(nn.Module):
         mask: mx.array | None = None,
         cache: Any | None = None,
     ) -> mx.array:
-        B, L, D = x.shape
+        B, L, _D = x.shape
 
         # Standard preprocessing (already optimized, don't evolve)
         queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
@@ -413,7 +413,7 @@ def benchmark_metal_gqa_optimization():
         avg_time = (end_time - start_time) / 10
         tokens_per_sec = seq_len / avg_time
 
-        print(f"  Metal GQA: {avg_time*1000:.2f} ms, {tokens_per_sec:.1f} tokens/sec")
+        print(f"  Metal GQA: {avg_time * 1000:.2f} ms, {tokens_per_sec:.1f} tokens/sec")
         print(f"  Memory: {mx.get_active_memory() / 1e9:.2f} GB")
 
 

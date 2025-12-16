@@ -15,6 +15,17 @@ from openevolve.discovery.code_instrumenter import (
     CodeInstrumenter,
     InstrumentationResult,
 )
+
+# Collaborative Discovery (Multi-Agent Novel Physics)
+from openevolve.discovery.collaborative_discovery import (
+    AgentRole,
+    CollaborativeDiscovery,
+    CollaborativeDiscoveryConfig,
+    Critique,
+    DiscoveryAgent,
+    Idea,
+    Synthesis,
+)
 from openevolve.discovery.crisis_detector import (
     CrisisDetector,
     CrisisDetectorConfig,
@@ -62,4 +73,12 @@ __all__ = [
     "InstrumentSynthesizerConfig",
     "CodeInstrumenter",
     "InstrumentationResult",
+    # Collaborative Discovery (Multi-Agent)
+    "CollaborativeDiscovery",
+    "CollaborativeDiscoveryConfig",
+    "DiscoveryAgent",
+    "AgentRole",
+    "Idea",
+    "Critique",
+    "Synthesis",
 ]

@@ -249,7 +249,7 @@ def evaluate_prompt(prompt, dataset, config, num_samples):
                 for i, (title, sentences) in enumerate(
                     zip(context_items["title"], context_items["sentences"])
                 ):
-                    context_text += f"Paragraph {i+1} ({title}):\n"
+                    context_text += f"Paragraph {i + 1} ({title}):\n"
                     context_text += " ".join(sentences) + "\n\n"
             formatted_prompt = prompt.format(context=context_text.strip(), question=input_text)
         elif is_ifeval:

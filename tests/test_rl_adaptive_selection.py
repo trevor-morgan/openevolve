@@ -557,7 +557,7 @@ class TestDatabaseRLIntegration(unittest.TestCase):
         policy = PolicyLearner(rl_config)
         self.db.set_rl_policy(policy)
 
-        parent, inspirations = self.db.sample()
+        parent, _inspirations = self.db.sample()
         self.assertIsNotNone(parent)
         # Parent fitness should be tracked
         self.assertIsNotNone(self.db._last_parent_fitness)

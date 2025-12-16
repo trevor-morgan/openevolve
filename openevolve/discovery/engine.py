@@ -26,6 +26,10 @@ from openevolve.config import DiscoveryConfig
 from openevolve.discovery.code_instrumenter import (
     CodeInstrumenter,
 )
+from openevolve.discovery.collaborative_discovery import (
+    CollaborativeDiscovery,
+    CollaborativeDiscoveryConfig,
+)
 from openevolve.discovery.crisis_detector import (
     CrisisDetector,
     CrisisDetectorConfig,
@@ -55,6 +59,20 @@ from openevolve.discovery.problem_space import (
     ProblemSpace,
 )
 from openevolve.discovery.skeptic import AdversarialSkeptic
+
+# Golden Path imports (Autonomous Ontological Discovery)
+try:
+    from openevolve.discovery.golden_path import GoldenPath
+    from openevolve.discovery.golden_path.golden_path import GoldenPathConfig as GPConfig
+    from openevolve.discovery.golden_path.gom_jabbar import GomJabbarConfig
+    from openevolve.discovery.golden_path.mentat import MentatConfig
+    from openevolve.discovery.golden_path.prescience import PrescienceConfig
+    from openevolve.discovery.golden_path.sietch_finder import SietchFinderConfig
+    from openevolve.discovery.golden_path.spice_agony import SpiceAgonyConfig
+
+    GOLDEN_PATH_AVAILABLE = True
+except ImportError:
+    GOLDEN_PATH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +153,8 @@ class DiscoveryEngine:
                 None,
             ),
             mirror_dimensions=getattr(config, "phenotype_feature_dimensions", None),
+            num_bins=getattr(config, "phenotype_bins", 10),
+            config=getattr(config, "epistemic_archive", None),
         )
 
         # State tracking
@@ -159,9 +179,16 @@ class DiscoveryEngine:
         self.crisis_detector: CrisisDetector | None = None
         self.instrument_synthesizer: InstrumentSynthesizer | None = None
         self.code_instrumenter: CodeInstrumenter | None = None
+        self.collaborative_discovery: CollaborativeDiscovery | None = None
 
         if getattr(config, "heisenberg", None) and config.heisenberg.enabled:
             self._init_heisenberg_engine()
+
+        # Golden Path (Autonomous Ontological Discovery)
+        self.golden_path: GoldenPath | None = None
+
+        if getattr(config, "golden_path", None) and config.golden_path.enabled:
+            self._init_golden_path()
 
         logger.info("Initialized DiscoveryEngine")
 
@@ -195,7 +222,113 @@ class DiscoveryEngine:
         # Initialize Code Instrumenter
         self.code_instrumenter = CodeInstrumenter()
 
+        # Initialize Collaborative Discovery if enabled
+        if getattr(self.config.heisenberg, "collaborative_discovery_enabled", False):
+            domain_context = (
+                self.config.heisenberg.domain_context
+                or self.config.problem_description
+                or "Scientific optimization problem"
+            )
+            collab_config = CollaborativeDiscoveryConfig(
+                max_debate_rounds=getattr(self.config.heisenberg, "max_debate_rounds", 5),
+                min_consensus_for_synthesis=getattr(
+                    self.config.heisenberg, "min_consensus_for_synthesis", 0.6
+                ),
+                elimination_threshold=getattr(self.config.heisenberg, "elimination_threshold", 0.3),
+            )
+            self.collaborative_discovery = CollaborativeDiscovery(
+                config=collab_config,
+                llm_ensemble=self.openevolve.llm_ensemble,
+                domain_context=domain_context,
+            )
+            logger.info("Collaborative Discovery enabled for novel physics generation")
+
         logger.info("Heisenberg Engine initialized successfully")
+
+    def _init_golden_path(self) -> None:
+        """Initialize the Golden Path framework for autonomous ontological discovery."""
+        if not GOLDEN_PATH_AVAILABLE:
+            logger.warning(
+                "Golden Path enabled but module not available. "
+                "Make sure openevolve.discovery.golden_path is properly installed."
+            )
+            return
+
+        logger.info("Initializing Golden Path for autonomous ontological discovery")
+
+        gp_config = self.config.golden_path
+
+        # Build component configs from the flat config
+        prescience_config = PrescienceConfig(
+            short_window=gp_config.prescience_short_window,
+            medium_window=gp_config.prescience_medium_window,
+            long_window=gp_config.prescience_long_window,
+            gradient_threshold=gp_config.gradient_threshold,
+            variance_threshold=gp_config.variance_threshold,
+            diversity_threshold=gp_config.diversity_threshold,
+        )
+
+        mentat_config = MentatConfig(
+            min_programs_for_analysis=gp_config.min_programs_for_analysis,
+            top_n_patterns=gp_config.top_n_patterns,
+            min_correlation_threshold=gp_config.min_correlation_threshold,
+            min_discriminative_power=gp_config.min_discriminative_power,
+        )
+
+        sietch_finder_config = SietchFinderConfig(
+            max_hypotheses_per_round=gp_config.max_hypotheses_per_round,
+            use_pattern_mining=gp_config.use_pattern_mining,
+            use_llm_hypothesis=gp_config.use_llm_hypothesis,
+            use_domain_templates=gp_config.use_domain_templates,
+        )
+
+        gom_jabbar_config = GomJabbarConfig(
+            min_correlation=gp_config.validation_min_correlation,
+            max_p_value=gp_config.validation_max_p_value,
+            min_incremental_r2=gp_config.validation_min_incremental_r2,
+            cv_folds=gp_config.validation_cv_folds,
+            bootstrap_iterations=gp_config.validation_bootstrap_iterations,
+        )
+
+        spice_agony_config = SpiceAgonyConfig(
+            auto_integrate=gp_config.auto_integrate,
+            default_variable_weight=gp_config.default_variable_weight,
+            backup_before_modify=gp_config.backup_before_modify,
+        )
+
+        # Build the main Golden Path config
+        golden_path_config = GPConfig(
+            prescience=prescience_config,
+            mentat=mentat_config,
+            sietch_finder=sietch_finder_config,
+            gom_jabbar=gom_jabbar_config,
+            spice_agony=spice_agony_config,
+            min_programs_for_discovery=gp_config.min_programs_for_discovery,
+            max_discovery_rounds=gp_config.max_discovery_rounds,
+            cooldown_after_discovery=gp_config.cooldown_after_discovery,
+            save_discoveries_to_file=gp_config.save_discoveries_to_file,
+            discoveries_output_path=gp_config.discoveries_output_path,
+        )
+
+        # Get domain context for LLM-based hypothesis generation
+        domain_context = (
+            self.config.problem_description
+            or getattr(self.config.heisenberg, "domain_context", None)
+            or "Scientific optimization problem"
+        )
+
+        # Get evaluator path if available
+        evaluator_path = getattr(self.openevolve, "evaluation_file", None)
+
+        # Initialize the Golden Path
+        self.golden_path = GoldenPath(
+            config=golden_path_config,
+            llm_ensemble=self.openevolve.llm_ensemble,
+            domain_context=domain_context,
+            evaluator_path=evaluator_path,
+        )
+
+        logger.info("Golden Path initialized - 'The sleeper must awaken'")
 
     def set_genesis_problem(
         self,
@@ -311,7 +444,7 @@ class DiscoveryEngine:
                 return False, metadata
 
         # Step 3: Add to archive with phenotype and surprise tracking
-        was_novel, surprise = self.archive.add_with_phenotype(
+        _was_novel, surprise = self.archive.add_with_phenotype(
             program,
             predicted_fitness=predicted_fitness if self.config.surprise_tracking_enabled else None,
         )
@@ -409,6 +542,43 @@ class DiscoveryEngine:
                 await self._handle_epistemic_crisis(crisis, program)
                 metadata["crisis_detected"] = crisis.to_dict()
 
+        # Step 7: Golden Path - Autonomous Ontological Discovery
+        if self.golden_path is not None:
+            # Observe this iteration
+            self.golden_path.observe_iteration(
+                iteration=self.stats["total_iterations"],
+                fitness=fitness,
+                metrics=program.metrics,
+                program_code=program.code,
+                program_id=program.id,
+            )
+
+            # Check if we should trigger discovery
+            if self.golden_path.should_activate():
+                logger.info("Golden Path ACTIVATED - 'The sleeper awakens'")
+                discovery_round = await self.golden_path.run_discovery()
+
+                if discovery_round.variables_integrated > 0:
+                    metadata["golden_path_discovery"] = {
+                        "round": discovery_round.round_number,
+                        "variables_integrated": discovery_round.variables_integrated,
+                        "discoveries": discovery_round.discoveries,
+                    }
+                    self.stats["ontology_expansions"] += discovery_round.variables_integrated
+                    logger.info(
+                        f"Golden Path discovered {discovery_round.variables_integrated} "
+                        f"new variables: {discovery_round.discoveries}"
+                    )
+
+            # Compute any discovered metrics and add score adjustment
+            if self.golden_path.get_discovered_variables():
+                discovered_metrics = self.golden_path.compute_discovered_metrics(
+                    program.code, program.metrics
+                )
+                if discovered_metrics:
+                    metadata["discovered_metrics"] = discovered_metrics
+                    # Note: Score adjustment is handled by SpiceAgony at evaluation time
+
         # Record per-problem progress in co-evolution mode.
         if self.problem_archive is not None and problem_id:
             iter_idx = getattr(program, "iteration_found", self.stats["total_iterations"])
@@ -502,8 +672,7 @@ class DiscoveryEngine:
 
         if not self.problem_archive.admit_candidate(new_problem):
             logger.info(
-                f"ProblemArchive rejected candidate {new_problem.id} "
-                f"(parent {parent_problem.id})"
+                f"ProblemArchive rejected candidate {new_problem.id} (parent {parent_problem.id})"
             )
             return None
 
@@ -668,7 +837,12 @@ class DiscoveryEngine:
         if self.ontology_manager.current_ontology is None:
             self.ontology_manager.create_genesis_ontology()
 
-        # Synthesize probes
+        # Use collaborative discovery if enabled, otherwise use probe-based discovery
+        if self.collaborative_discovery is not None:
+            await self._handle_crisis_collaborative(crisis, triggering_program)
+            return
+
+        # Synthesize probes (traditional approach)
         logger.info("Synthesizing probes for hidden variable discovery...")
         probes = await self.instrument_synthesizer.synthesize_probes(
             crisis=crisis,
@@ -747,6 +921,137 @@ class DiscoveryEngine:
 
         else:
             logger.info("No valid variables discovered - continuing without expansion")
+
+    async def _handle_crisis_collaborative(
+        self,
+        crisis: EpistemicCrisis,
+        triggering_program: "Program",
+    ) -> None:
+        """
+        Handle epistemic crisis through collaborative multi-agent discovery.
+
+        Instead of probe-based discovery, this uses a team of specialized agents
+        (Theorist, Experimentalist, Skeptic, Synthesizer) to debate and generate
+        novel physics ideas through adversarial collaboration.
+        """
+        logger.info("=== COLLABORATIVE DISCOVERY SESSION STARTING ===")
+        logger.info("Using multi-agent debate to discover novel physics...")
+
+        # Build crisis context for the agents
+        crisis_context = {
+            "best_fitness": max(self.crisis_detector.fitness_history[-20:])
+            if self.crisis_detector.fitness_history
+            else 0.0,
+            "fitness_history": self.crisis_detector.fitness_history[-20:],
+            "current_metrics": list(triggering_program.metrics.keys()),
+            "evaluation_artifacts": triggering_program.metadata.get("artifacts", {}),
+            "crisis_type": crisis.crisis_type,
+            "crisis_evidence": crisis.evidence,
+        }
+
+        # Run collaborative discovery session
+        syntheses = await self.collaborative_discovery.run_discovery_session(crisis_context)
+
+        # Log the debate summary
+        debate_summary = self.collaborative_discovery.get_debate_summary()
+        logger.info(
+            f"Debate complete: {debate_summary['total_ideas_proposed']} ideas proposed, "
+            f"{len(debate_summary['final_surviving_ideas'])} survived, "
+            f"{len(syntheses)} syntheses generated"
+        )
+
+        # Convert successful syntheses to Variables for ontology expansion
+        discovered_variables: list[Variable] = []
+        for synthesis in syntheses:
+            if synthesis.consensus_score >= self.config.heisenberg.min_consensus_for_synthesis:
+                # Create a Variable from the synthesis
+                var = Variable(
+                    name=synthesis.variable_name,
+                    description=synthesis.description,
+                    var_type="computed",
+                    source="collaborative_discovery",
+                    confidence=synthesis.consensus_score,
+                )
+                # Store the computation code in metadata
+                var.metadata = {
+                    "computation_code": synthesis.computation_code,
+                    "validation_test": synthesis.validation_test,
+                    "source_ideas": synthesis.source_ideas,
+                }
+                discovered_variables.append(var)
+                logger.info(
+                    f"NOVEL PHYSICS DISCOVERED: '{var.name}' "
+                    f"(consensus: {synthesis.consensus_score:.2f})"
+                )
+
+        # Log the collaborative discovery event
+        self._log_event(
+            DiscoveryEvent(
+                timestamp=time.time(),
+                event_type="collaborative_discovery",
+                problem_id=self.current_problem.id if self.current_problem else "",
+                program_id=triggering_program.id,
+                details={
+                    "debate_summary": debate_summary,
+                    "syntheses": [
+                        {
+                            "variable": s.variable_name,
+                            "description": s.description,
+                            "consensus": s.consensus_score,
+                        }
+                        for s in syntheses
+                    ],
+                    "discovered_variables": [v.name for v in discovered_variables],
+                },
+            )
+        )
+
+        # Expand ontology if we discovered valid variables
+        if discovered_variables:
+            logger.info(
+                f"ONTOLOGY EXPANSION: Adding {len(discovered_variables)} novel physics variables: "
+                f"{[v.name for v in discovered_variables]}"
+            )
+
+            new_ontology = self.ontology_manager.expand_ontology(
+                new_variables=discovered_variables,
+                discovered_via=f"collaborative_{crisis.id}",
+            )
+
+            self.stats["ontology_expansions"] += 1
+
+            # Log the expansion event
+            self._log_event(
+                DiscoveryEvent(
+                    timestamp=time.time(),
+                    event_type="ontology_expansion",
+                    problem_id=self.current_problem.id if self.current_problem else "",
+                    details={
+                        "new_variables": [v.name for v in discovered_variables],
+                        "ontology_generation": new_ontology.generation,
+                        "triggered_by_crisis": crisis.id,
+                        "discovery_method": "collaborative",
+                        "variable_details": [
+                            {
+                                "name": v.name,
+                                "description": v.description,
+                                "confidence": v.confidence,
+                                "has_code": bool(v.metadata.get("computation_code")),
+                            }
+                            for v in discovered_variables
+                        ],
+                    },
+                )
+            )
+
+            # Perform soft reset
+            await self._perform_soft_reset(new_ontology)
+
+        else:
+            logger.info(
+                "Collaborative discovery did not produce validated variables. "
+                "Agents may need more domain context or different prompting."
+            )
 
     async def _perform_soft_reset(self, new_ontology: Ontology) -> None:
         """
@@ -1038,6 +1343,43 @@ class DiscoveryEngine:
 
             logger.info(f"Saved Heisenberg state to {heisenberg_path}")
 
+        # Save Golden Path state if enabled
+        if self.golden_path is not None:
+            golden_path_path = os.path.join(path, "golden_path")
+            os.makedirs(golden_path_path, exist_ok=True)
+
+            # Save Golden Path state
+            golden_path_state = self.golden_path.get_state()
+            with open(os.path.join(golden_path_path, "state.json"), "w") as f:
+                json.dump(golden_path_state, f, indent=2)
+
+            # Save discovery rounds
+            rounds_data = [
+                {
+                    "round_number": r.round_number,
+                    "iteration": r.iteration,
+                    "crisis_type": r.crisis_type.value
+                    if hasattr(r.crisis_type, "value")
+                    else str(r.crisis_type),
+                    "patterns_found": r.patterns_found,
+                    "hypotheses_generated": r.hypotheses_generated,
+                    "variables_validated": r.variables_validated,
+                    "variables_integrated": r.variables_integrated,
+                    "discoveries": r.discoveries,
+                }
+                for r in self.golden_path.discovery_rounds
+            ]
+            with open(os.path.join(golden_path_path, "discovery_rounds.json"), "w") as f:
+                json.dump(rounds_data, f, indent=2)
+
+            # Export discovered variables if any
+            if self.golden_path.get_discovered_variables():
+                self.golden_path.spice_agony.export_discovered_variables(
+                    os.path.join(golden_path_path, "discovered_variables.py")
+                )
+
+            logger.info(f"Saved Golden Path state to {golden_path_path}")
+
         logger.info(f"Saved discovery state to {path}")
 
     def load_state(self, path: str) -> None:
@@ -1125,6 +1467,24 @@ class DiscoveryEngine:
                     # Note: discovered_variables are derived from ontology, don't reload
 
             logger.info(f"Loaded Heisenberg state from {heisenberg_path}")
+
+        # Load Golden Path state if it exists
+        golden_path_path = os.path.join(path, "golden_path")
+        if os.path.exists(golden_path_path) and self.golden_path is not None:
+            # Load state (limited restoration - mainly for tracking)
+            state_path = os.path.join(golden_path_path, "state.json")
+            if os.path.exists(state_path):
+                with open(state_path) as f:
+                    state_data = json.load(f)
+                    # Restore basic state
+                    self.golden_path.last_discovery_iteration = state_data.get(
+                        "last_discovery_iteration", 0
+                    )
+
+            # Note: Discovery rounds and active variables are regenerated on load
+            # since they require the actual compute functions
+
+            logger.info(f"Loaded Golden Path state from {golden_path_path}")
 
         logger.info(f"Loaded discovery state from {path}")
 

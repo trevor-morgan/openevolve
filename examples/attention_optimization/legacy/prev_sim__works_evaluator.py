@@ -323,10 +323,10 @@ class MLIRAttentionEvaluator:
         # Add optimization annotations as comments
         header = f"""
         // Optimized with parameters:
-        // Tile sizes: {params.get('tile_size_m', 32)}x{params.get('tile_size_n', 32)}x{params.get('tile_size_k', 32)}
-        // Vectorization: {params.get('vectorization', 'none')}
-        // Fusion: {params.get('fusion_strategy', 'none')}
-        // Unroll factor: {params.get('unroll_factor', 1)}
+        // Tile sizes: {params.get("tile_size_m", 32)}x{params.get("tile_size_n", 32)}x{params.get("tile_size_k", 32)}
+        // Vectorization: {params.get("vectorization", "none")}
+        // Fusion: {params.get("fusion_strategy", "none")}
+        // Unroll factor: {params.get("unroll_factor", 1)}
         """
 
         optimized = header + optimized

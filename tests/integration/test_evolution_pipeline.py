@@ -59,7 +59,7 @@ class TestEvolutionPipeline:
         assert len(controller.database.programs) >= 1, "Should have at least the initial program"
 
         # Check that programs are distributed across islands
-        island_counts = {i: 0 for i in range(evolution_config.database.num_islands)}
+        island_counts = dict.fromkeys(range(evolution_config.database.num_islands), 0)
         for program in controller.database.programs.values():
             island = program.metadata.get("island", 0)
             island_counts[island] += 1

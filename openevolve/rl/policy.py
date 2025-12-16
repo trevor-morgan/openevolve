@@ -109,7 +109,7 @@ class BasePolicyLearner(ABC):
         pass
 
     @abstractmethod
-    def update(self, state: EvolutionState, action: int, reward: float):
+    def update(self, state: EvolutionState, action: int, reward: float, max_history: int = 100):
         """Update the policy with observed reward"""
         pass
 
@@ -183,7 +183,7 @@ class ContextualThompsonSampling(BasePolicyLearner):
 
         return int(np.argmax(sampled_rewards))
 
-    def update(self, state: EvolutionState, action: int, reward: float):
+    def update(self, state: EvolutionState, action: int, reward: float, max_history: int = 100):
         """Bayesian update after observing reward
 
         Updates the posterior distribution for the chosen action.
@@ -289,7 +289,7 @@ class ContextualUCB(BasePolicyLearner):
 
         return int(np.argmax(ucb_values))
 
-    def update(self, state: EvolutionState, action: int, reward: float):
+    def update(self, state: EvolutionState, action: int, reward: float, max_history: int = 100):
         """Update model with observed reward"""
         state_vec = state.to_array()
 
@@ -375,9 +375,9 @@ class EpsilonGreedy(BasePolicyLearner):
             )
             return best_action
 
-    def update(self, state: EvolutionState, action: int, reward: float):
+    def update(self, state: EvolutionState, action: int, reward: float, max_history: int = 100):
         """Update action statistics"""
-        self.action_stats[action].update(reward)
+        self.action_stats[action].update(reward, max_history=max_history)
         self.iterations += 1
 
     def save_state(self) -> dict[str, Any]:
@@ -556,10 +556,14 @@ class PolicyLearner:
 
         # Update algorithm
         algorithm = self._get_algorithm(island_idx)
-        algorithm.update(state, self.last_action, reward)
+        algorithm.update(
+            state, self.last_action, reward, max_history=self.config.action_history_size
+        )
 
         # Update global stats
-        self.global_action_stats[self.last_action].update(reward)
+        self.global_action_stats[self.last_action].update(
+            reward, max_history=self.config.action_history_size
+        )
 
         # Update state extractor
         self.state_extractor.record_outcome(

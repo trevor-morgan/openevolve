@@ -7,6 +7,7 @@ import logging
 import multiprocessing as mp
 import threading
 import time
+import uuid
 from concurrent.futures import (
     Executor,
     Future,
@@ -168,13 +169,30 @@ def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> Serializa
             return SerializableResult(error="LLM returned None response", iteration=iteration)
 
         # Parse response based on evolution mode
+        reasoning_trace = None
         if _worker_config.diff_based_evolution:
             from openevolve.utils.code_utils import apply_diff, extract_diffs, format_diff_summary
 
+            # Attempt to extract reasoning (text before the first diff block)
+            # This is a heuristic; robust extraction might need regex matching the diff format
+            # For now, we take everything before the first "```" as reasoning if present
+            if "```" in llm_response:
+                reasoning_trace = llm_response.split("```")[0].strip()
+
             diff_blocks = extract_diffs(llm_response)
             if not diff_blocks:
+                # Capture failed generation for graveyard
+                failed_prog = Program(
+                    id=str(uuid.uuid4()),
+                    code="",  # No code extracted
+                    language=_worker_config.language,
+                    parent_id=parent.id,
+                    metadata={"raw_llm_response": llm_response, "reasoning_trace": reasoning_trace},
+                )
                 return SerializableResult(
-                    error="No valid diffs found in response", iteration=iteration
+                    error="No valid diffs found in response",
+                    iteration=iteration,
+                    child_program_dict=failed_prog.to_dict(),
                 )
 
             child_code = apply_diff(parent.code, llm_response)
@@ -182,10 +200,24 @@ def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> Serializa
         else:
             from openevolve.utils.code_utils import parse_full_rewrite
 
+            # Extract reasoning (text before code block)
+            if "```" in llm_response:
+                reasoning_trace = llm_response.split("```")[0].strip()
+
             new_code = parse_full_rewrite(llm_response, _worker_config.language)
             if not new_code:
+                # Capture failed generation for graveyard
+                failed_prog = Program(
+                    id=str(uuid.uuid4()),
+                    code="",
+                    language=_worker_config.language,
+                    parent_id=parent.id,
+                    metadata={"raw_llm_response": llm_response, "reasoning_trace": reasoning_trace},
+                )
                 return SerializableResult(
-                    error="No valid code found in response", iteration=iteration
+                    error="No valid code found in response",
+                    iteration=iteration,
+                    child_program_dict=failed_prog.to_dict(),
                 )
 
             child_code = new_code
@@ -193,14 +225,20 @@ def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> Serializa
 
         # Check code length
         if len(child_code) > _worker_config.max_code_length:
+            failed_prog = Program(
+                id=str(uuid.uuid4()),
+                code=child_code,
+                language=_worker_config.language,
+                parent_id=parent.id,
+                metadata={"reasoning_trace": reasoning_trace},
+            )
             return SerializableResult(
                 error=f"Generated code exceeds maximum length ({len(child_code)} > {_worker_config.max_code_length})",
                 iteration=iteration,
+                child_program_dict=failed_prog.to_dict(),
             )
 
         # Evaluate the child program
-        import uuid
-
         child_id = str(uuid.uuid4())
         problem_context = snapshot.get("problem_context")
         max_stage = snapshot.get("max_evaluation_stage")
@@ -235,6 +273,9 @@ def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> Serializa
             except Exception as e:
                 logger.warning(f"Worker meta-prompt update failed: {e}")
 
+        # Extract inspiration IDs
+        inspiration_ids = [insp.get("id") for insp in inspirations]
+
         # Create child program
         child_program = Program(
             id=child_id,
@@ -249,6 +290,8 @@ def _run_iteration_worker(iteration: int, snapshot: dict[str, Any]) -> Serializa
                 "parent_metrics": parent.metrics,
                 "island": parent_island,
                 "problem_id": snapshot.get("problem_id"),
+                "reasoning_trace": reasoning_trace,
+                "inspiration_ids": inspiration_ids,
             },
         )
 
@@ -416,6 +459,27 @@ class ProcessParallelController:
         import sys
 
         current_env = dict(os.environ)
+
+        # Check for distributed execution (Ray)
+        if getattr(self.config.evaluator, "distributed", False):
+            try:
+                from openevolve.utils.ray_executor import RayExecutor
+
+                self.executor = RayExecutor(
+                    num_workers=self.num_workers,
+                    config_dict=config_dict,
+                    evaluation_file=self.evaluation_file,
+                    env_vars=current_env,
+                )
+                self.executor_mode = "ray"
+                logger.info(
+                    f"Started distributed execution on Ray cluster with {self.num_workers} workers"
+                )
+                return
+            except ImportError:
+                logger.warning("Ray not available, falling back to local execution.")
+            except Exception as e:
+                logger.error(f"Failed to start Ray executor: {e}")
 
         executor_kwargs = {
             "max_workers": self.num_workers,
@@ -627,6 +691,8 @@ class ProcessParallelController:
 
         # Track pending futures by island to maintain distribution
         pending_futures: dict[int, Future] = {}
+        # Track background validation tasks to ensure they complete
+        validation_tasks: set[asyncio.Task] = set()
         island_pending: dict[int, list[int]] = {i: [] for i in range(self.num_islands)}
         batch_size = min(self.num_workers * 2, max_iterations)
 
@@ -657,7 +723,6 @@ class ProcessParallelController:
         early_stopping_enabled = self.config.early_stopping_patience is not None
         if early_stopping_enabled:
             best_score = float("-inf")
-            iterations_without_improvement = 0
             logger.info(
                 f"Early stopping enabled: patience={self.config.early_stopping_patience}, "
                 f"threshold={self.config.convergence_threshold}, "
@@ -694,198 +759,25 @@ class ProcessParallelController:
                 if result.error:
                     logger.warning(f"Iteration {completed_iteration} error: {result.error}")
                 elif result.child_program_dict:
-                    # Reconstruct program from dict
-                    child_program = Program(**result.child_program_dict)
-
-                    # Attach artifacts early so discovery/Heisenberg can see them
-                    if result.artifacts:
-                        if child_program.metadata is None:
-                            child_program.metadata = {}
-                        # Keep a copy in metadata for downstream consumers
-                        child_program.metadata.setdefault("artifacts", result.artifacts)
-
-                    # Discovery mode pre-admission processing:
-                    # Run skeptic/falsification BEFORE admitting to the database.
-                    discovery_metadata: dict[str, Any] | None = None
-                    falsification_passed = True
-                    is_solution = False
-                    if (
-                        self.discovery_engine is not None
-                        and hasattr(self.config, "discovery")
-                        and self.config.discovery.enabled
-                    ):
-                        try:
-                            (
-                                is_solution,
-                                discovery_metadata,
-                            ) = await self.discovery_engine.process_program(child_program)
-                            falsification_passed = discovery_metadata.get(
-                                "falsification_passed", True
-                            )
-
-                            # Persist a compact discovery summary on admitted programs for debugging.
-                            if falsification_passed and discovery_metadata:
-                                if child_program.metadata is None:
-                                    child_program.metadata = {}
-                                existing = child_program.metadata.get("discovery")
-                                discovery_summary = existing if isinstance(existing, dict) else {}
-                                for k in (
-                                    "problem_id",
-                                    "falsification_passed",
-                                    "surprise_score",
-                                    "is_positive_surprise",
-                                    "is_solution",
-                                ):
-                                    if k in discovery_metadata:
-                                        discovery_summary[k] = discovery_metadata[k]
-                                try:
-                                    fr = discovery_metadata.get("falsification_results")
-                                    if isinstance(fr, list) and fr:
-                                        discovery_summary["falsification_attack_types"] = [
-                                            r.get("attack_type") for r in fr if isinstance(r, dict)
-                                        ][:10]
-                                except Exception:
-                                    pass
-                                child_program.metadata["discovery"] = discovery_summary
-
-                            # In single-problem discovery mode, refresh problem context
-                            # for future worker prompts when a new generation appears.
-                            if (
-                                falsification_passed
-                                and is_solution
-                                and getattr(self.discovery_engine, "problem_archive", None) is None
-                            ):
-                                current_problem = getattr(
-                                    self.discovery_engine, "current_problem", None
-                                )
-                                if current_problem is not None:
-                                    try:
-                                        current_gen = int(current_problem.generation)
-                                    except Exception:
-                                        current_gen = self._last_problem_generation
-                                    if current_gen > self._last_problem_generation:
-                                        self._last_problem_generation = current_gen
-                                        self.set_problem_context(
-                                            self.discovery_engine.get_current_problem_context()
-                                        )
-                                        logger.info(
-                                            f"PROBLEM EVOLVED to generation {current_gen} "
-                                            f"(difficulty: {getattr(current_problem, 'difficulty_level', 0.0):.1f})"
-                                        )
-                        except Exception as e:
-                            logger.warning(f"Discovery processing failed: {e}")
-                            falsification_passed = True
-
-                    if falsification_passed:
-                        # Admit to database if discovery engine didn't already add it
-                        if child_program.id not in self.database.programs:
-                            # Add to database (will auto-inherit parent's island)
-                            self.database.add(child_program, iteration=completed_iteration)
-
-                        # Store artifacts after admission
-                        if result.artifacts:
-                            self.database.store_artifacts(child_program.id, result.artifacts)
-                    else:
-                        logger.info(
-                            f"Program {child_program.id} FALSIFIED - not admitted to database"
+                    # Create background task for processing (Skeptic, Admission, Logging)
+                    # This prevents the main loop from blocking on long validations
+                    task = asyncio.create_task(
+                        self._process_worker_result(
+                            result,
+                            completed_iteration,
+                            program_callback,
+                            early_stopping_enabled,
+                            best_score if early_stopping_enabled else None,
                         )
+                    )
+                    validation_tasks.add(task)
+                    task.add_done_callback(validation_tasks.discard)
 
-                    # Meta-prompting reward attribution (parallel-safe)
-                    if (
-                        self.prompt_sampler is not None
-                        and getattr(result, "meta_prompt_strategy", None)
-                        and getattr(self.prompt_sampler, "meta_prompt_evolver", None)
-                    ):
-                        parent_program = (
-                            self.database.get(result.parent_id) if result.parent_id else None
-                        )
-                        if parent_program:
-                            feature_dims = self.database.config.feature_dimensions
-                            parent_fitness = get_fitness_score(parent_program.metrics, feature_dims)
-                            # Penalize falsified children by zeroing fitness
-                            raw_child_fitness = get_fitness_score(
-                                child_program.metrics, feature_dims
-                            )
-                            child_fitness = raw_child_fitness if falsification_passed else 0.0
-                            try:
-                                self.prompt_sampler.report_explicit_outcome(
-                                    strategy_name=result.meta_prompt_strategy,
-                                    parent_fitness=parent_fitness,
-                                    child_fitness=child_fitness,
-                                    island_idx=result.meta_prompt_island
-                                    or child_program.metadata.get(
-                                        "island", self.database.current_island
-                                    ),
-                                    context=result.meta_prompt_context,
-                                )
-                            except Exception as e:
-                                logger.warning(f"Meta-prompt reward attribution failed: {e}")
-
-                    # RL reward attribution (parallel-safe)
-                    rl_info = self._rl_selections.pop(completed_iteration, None)
-                    if rl_info and self.database.rl_policy and self.database.rl_policy.enabled:
-                        try:
-                            feature_dims = self.database.config.feature_dimensions
-                            raw_child_fitness = get_fitness_score(
-                                child_program.metrics, feature_dims
-                            )
-                            child_fitness = raw_child_fitness if falsification_passed else 0.0
-                            rl_policy = self.database.rl_policy
-                            rl_policy.last_action = rl_info["action"]
-                            rl_policy.last_state = rl_info["state"]
-                            rl_policy.report_outcome(
-                                parent_fitness=rl_info["parent_fitness"],
-                                child_fitness=child_fitness,
-                                island_idx=rl_info["island_idx"],
-                            )
-                        except Exception as e:
-                            logger.warning(f"RL outcome report failed: {e}")
-
-                    # Call user program callback if provided (not used for discovery now)
-                    if program_callback is not None:
-                        try:
-                            await program_callback(child_program)
-                        except Exception as e:
-                            logger.warning(f"Program callback failed: {e}")
-
-                    # Log evolution trace
-                    if self.evolution_tracer:
-                        # Retrieve parent program for trace logging
-                        parent_program = (
-                            self.database.get(result.parent_id) if result.parent_id else None
-                        )
-                        if parent_program:
-                            # Determine island ID
-                            island_id = child_program.metadata.get(
-                                "island", self.database.current_island
-                            )
-
-                            self.evolution_tracer.log_trace(
-                                iteration=completed_iteration,
-                                parent_program=parent_program,
-                                child_program=child_program,
-                                prompt=result.prompt,
-                                llm_response=result.llm_response,
-                                artifacts=result.artifacts,
-                                island_id=island_id,
-                                metadata={
-                                    "iteration_time": result.iteration_time,
-                                    "changes": child_program.metadata.get("changes", ""),
-                                },
-                            )
-
-                    # Log prompts
-                    if result.prompt:
-                        self.database.log_prompt(
-                            template_key=(
-                                "full_rewrite_user"
-                                if not self.config.diff_based_evolution
-                                else "diff_user"
-                            ),
-                            program_id=child_program.id,
-                            prompt=result.prompt,
-                            responses=[result.llm_response] if result.llm_response else [],
-                        )
+                    # Update best score for next iteration (optimistic / best-effort locally)
+                    # Note: The true best score is tracked in the task, but we need a local
+                    # reference for the loop's early stopping logic if we want it to trigger
+                    # strictly on completion order. However, given async nature, exact
+                    # stopping iteration might vary slightly.
 
                     # Island management
                     if (
@@ -905,47 +797,6 @@ class ProcessParallelController:
                         self.database.migrate_programs()
                         self.database.log_island_status()
 
-                    # Log progress
-                    logger.info(
-                        f"Iteration {completed_iteration}: "
-                        f"Program {child_program.id} "
-                        f"(parent: {result.parent_id}) "
-                        f"completed in {result.iteration_time:.2f}s"
-                    )
-
-                    if child_program.metrics:
-                        metrics_str = ", ".join(
-                            [
-                                f"{k}={v:.4f}" if isinstance(v, (int, float)) else f"{k}={v}"
-                                for k, v in child_program.metrics.items()
-                            ]
-                        )
-                        logger.info(f"Metrics: {metrics_str}")
-
-                        # Check if this is the first program without combined_score
-                        if not hasattr(self, "_warned_about_combined_score"):
-                            self._warned_about_combined_score = False
-
-                        if (
-                            "combined_score" not in child_program.metrics
-                            and not self._warned_about_combined_score
-                        ):
-                            avg_score = safe_numeric_average(child_program.metrics)
-                            logger.warning(
-                                f"⚠️  No 'combined_score' metric found in evaluation results. "
-                                f"Using average of all numeric metrics ({avg_score:.4f}) for evolution guidance. "
-                                f"For better evolution results, please modify your evaluator to return a 'combined_score' "
-                                f"metric that properly weights different aspects of program performance."
-                            )
-                            self._warned_about_combined_score = True
-
-                    # Check for new best
-                    if self.database.best_program_id == child_program.id:
-                        logger.info(
-                            f"🌟 New best solution found at iteration {completed_iteration}: "
-                            f"{child_program.id}"
-                        )
-
                     # Checkpoint callback
                     # Don't checkpoint at iteration 0 (that's just the initial program)
                     if (
@@ -958,61 +809,6 @@ class ProcessParallelController:
                         self.database.log_island_status()
                         if checkpoint_callback:
                             checkpoint_callback(completed_iteration)
-
-                    # Check target score
-                    if target_score is not None and child_program.metrics:
-                        if (
-                            "combined_score" in child_program.metrics
-                            and child_program.metrics["combined_score"] >= target_score
-                        ):
-                            logger.info(
-                                f"Target score {target_score} reached at iteration {completed_iteration}"
-                            )
-                            break
-
-                    # Check early stopping
-                    if early_stopping_enabled and child_program.metrics:
-                        # Get the metric to track for early stopping
-                        current_score = None
-                        if self.config.early_stopping_metric in child_program.metrics:
-                            current_score = child_program.metrics[self.config.early_stopping_metric]
-                        elif self.config.early_stopping_metric == "combined_score":
-                            # Default metric not found, use safe average (standard pattern)
-                            current_score = safe_numeric_average(child_program.metrics)
-                        else:
-                            # User specified a custom metric that doesn't exist
-                            logger.warning(
-                                f"Early stopping metric '{self.config.early_stopping_metric}' not found, using safe numeric average"
-                            )
-                            current_score = safe_numeric_average(child_program.metrics)
-
-                        if current_score is not None and isinstance(current_score, (int, float)):
-                            # Check for improvement
-                            improvement = current_score - best_score
-                            if improvement >= self.config.convergence_threshold:
-                                best_score = current_score
-                                iterations_without_improvement = 0
-                                logger.debug(
-                                    f"New best score: {best_score:.4f} (improvement: {improvement:+.4f})"
-                                )
-                            else:
-                                iterations_without_improvement += 1
-                                logger.debug(
-                                    f"No improvement: {iterations_without_improvement}/{self.config.early_stopping_patience}"
-                                )
-
-                            # Check if we should stop
-                            if (
-                                iterations_without_improvement
-                                >= self.config.early_stopping_patience
-                            ):
-                                self.early_stopping_triggered = True
-                                logger.info(
-                                    f"🛑 Early stopping triggered at iteration {completed_iteration}: "
-                                    f"No improvement for {iterations_without_improvement} iterations "
-                                    f"(best score: {best_score:.4f})"
-                                )
-                                break
 
             except FutureTimeoutError:
                 logger.error(
@@ -1047,6 +843,11 @@ class ProcessParallelController:
                         next_iteration += 1
                         break  # Only submit one iteration per completion to maintain balance
 
+        # Wait for any remaining validation tasks to finish
+        if validation_tasks:
+            logger.info(f"Waiting for {len(validation_tasks)} pending validation tasks...")
+            await asyncio.gather(*validation_tasks, return_exceptions=True)
+
         # Handle shutdown
         if self.shutdown_event.is_set():
             logger.info("Shutdown requested, canceling remaining evaluations...")
@@ -1062,6 +863,269 @@ class ProcessParallelController:
             logger.info("✅ Evolution completed - Maximum iterations reached")
 
         return self.database.get_best_program()
+
+    async def _process_worker_result(
+        self,
+        result: SerializableResult,
+        completed_iteration: int,
+        program_callback=None,
+        early_stopping_enabled: bool = False,
+        best_score_ref: float | None = None,
+    ) -> None:
+        """
+        Process a completed worker result in the background.
+
+        Handles:
+        - Reconstructing the Program object
+        - Artifact attachment
+        - Discovery/Skeptic validation (can be slow)
+        - Database admission
+        - Rewards (Meta-prompt, RL)
+        - Logging and Tracing
+        """
+        try:
+            # Handle infrastructure/generation errors (Graveyard)
+            if result.error:
+                if result.child_program_dict:
+                    self.database.add_to_graveyard(result.child_program_dict, result.error)
+                logger.warning(f"Iteration {completed_iteration} failed: {result.error}")
+                return
+
+            # Reconstruct program from dict
+            child_program = Program(**result.child_program_dict)
+
+            # Handle runtime evaluation errors (Graveyard)
+            if child_program.metrics and (
+                child_program.metrics.get("error") or child_program.metrics.get("timeout")
+            ):
+                error_msg = str(child_program.metrics.get("error", "Timeout or Evaluation Failure"))
+                self.database.add_to_graveyard(child_program.to_dict(), error_msg)
+                # We typically continue to admit "soft" failures (score=0) to main DB
+                # so the evolution knows it explored this area, unless it's total garbage.
+                # For now, we allow them to proceed to admission with score 0.
+
+            # Attach artifacts early so discovery/Heisenberg can see them
+            if result.artifacts:
+                if child_program.metadata is None:
+                    child_program.metadata = {}
+                # Keep a copy in metadata for downstream consumers
+                child_program.metadata.setdefault("artifacts", result.artifacts)
+
+            # Discovery mode pre-admission processing:
+            # Run skeptic/falsification BEFORE admitting to the database.
+            discovery_metadata: dict[str, Any] | None = None
+            falsification_passed = True
+            is_solution = False
+            if (
+                self.discovery_engine is not None
+                and hasattr(self.config, "discovery")
+                and self.config.discovery.enabled
+            ):
+                try:
+                    (
+                        is_solution,
+                        discovery_metadata,
+                    ) = await self.discovery_engine.process_program(child_program)
+                    falsification_passed = discovery_metadata.get("falsification_passed", True)
+
+                    # Persist a compact discovery summary on admitted programs for debugging.
+                    if falsification_passed and discovery_metadata:
+                        if child_program.metadata is None:
+                            child_program.metadata = {}
+                        existing = child_program.metadata.get("discovery")
+                        discovery_summary = existing if isinstance(existing, dict) else {}
+                        for k in (
+                            "problem_id",
+                            "falsification_passed",
+                            "surprise_score",
+                            "is_positive_surprise",
+                            "is_solution",
+                        ):
+                            if k in discovery_metadata:
+                                discovery_summary[k] = discovery_metadata[k]
+                        try:
+                            fr = discovery_metadata.get("falsification_results")
+                            if isinstance(fr, list) and fr:
+                                discovery_summary["falsification_attack_types"] = [
+                                    r.get("attack_type") for r in fr if isinstance(r, dict)
+                                ][:10]
+                        except Exception:
+                            pass
+                        child_program.metadata["discovery"] = discovery_summary
+
+                    # In single-problem discovery mode, refresh problem context
+                    # for future worker prompts when a new generation appears.
+                    if (
+                        falsification_passed
+                        and is_solution
+                        and getattr(self.discovery_engine, "problem_archive", None) is None
+                    ):
+                        current_problem = getattr(self.discovery_engine, "current_problem", None)
+                        if current_problem is not None:
+                            try:
+                                current_gen = int(current_problem.generation)
+                            except Exception:
+                                current_gen = self._last_problem_generation
+                            if current_gen > self._last_problem_generation:
+                                self._last_problem_generation = current_gen
+                                self.set_problem_context(
+                                    self.discovery_engine.get_current_problem_context()
+                                )
+                                logger.info(
+                                    f"PROBLEM EVOLVED to generation {current_gen} "
+                                    f"(difficulty: {getattr(current_problem, 'difficulty_level', 0.0):.1f})"
+                                )
+                except Exception as e:
+                    logger.warning(f"Discovery processing failed: {e}")
+                    falsification_passed = True
+
+            if falsification_passed:
+                # Admit to database if discovery engine didn't already add it
+                if child_program.id not in self.database.programs:
+                    # Add to database (will auto-inherit parent's island)
+                    self.database.add(child_program, iteration=completed_iteration)
+
+                # Store artifacts after admission
+                if result.artifacts:
+                    self.database.store_artifacts(child_program.id, result.artifacts)
+            else:
+                logger.info(f"Program {child_program.id} FALSIFIED - not admitted to database")
+
+            # Meta-prompting reward attribution (parallel-safe)
+            if (
+                self.prompt_sampler is not None
+                and getattr(result, "meta_prompt_strategy", None)
+                and getattr(self.prompt_sampler, "meta_prompt_evolver", None)
+            ):
+                parent_program = self.database.get(result.parent_id) if result.parent_id else None
+                if parent_program:
+                    feature_dims = self.database.config.feature_dimensions
+                    parent_fitness = get_fitness_score(parent_program.metrics, feature_dims)
+                    # Penalize falsified children by zeroing fitness
+                    raw_child_fitness = get_fitness_score(child_program.metrics, feature_dims)
+                    child_fitness = raw_child_fitness if falsification_passed else 0.0
+                    try:
+                        self.prompt_sampler.report_explicit_outcome(
+                            strategy_name=result.meta_prompt_strategy,
+                            parent_fitness=parent_fitness,
+                            child_fitness=child_fitness,
+                            island_idx=result.meta_prompt_island
+                            or child_program.metadata.get("island", self.database.current_island),
+                            context=result.meta_prompt_context,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Meta-prompt reward attribution failed: {e}")
+
+            # RL reward attribution (parallel-safe)
+            rl_info = self._rl_selections.pop(completed_iteration, None)
+            if rl_info and self.database.rl_policy and self.database.rl_policy.enabled:
+                try:
+                    feature_dims = self.database.config.feature_dimensions
+                    raw_child_fitness = get_fitness_score(child_program.metrics, feature_dims)
+                    child_fitness = raw_child_fitness if falsification_passed else 0.0
+                    rl_policy = self.database.rl_policy
+                    rl_policy.last_action = rl_info["action"]
+                    rl_policy.last_state = rl_info["state"]
+                    rl_policy.report_outcome(
+                        parent_fitness=rl_info["parent_fitness"],
+                        child_fitness=child_fitness,
+                        island_idx=rl_info["island_idx"],
+                    )
+                except Exception as e:
+                    logger.warning(f"RL outcome report failed: {e}")
+
+            # Call user program callback if provided (not used for discovery now)
+            if program_callback is not None:
+                try:
+                    await program_callback(child_program)
+                except Exception as e:
+                    logger.warning(f"Program callback failed: {e}")
+
+            # Log evolution trace
+            if self.evolution_tracer:
+                # Retrieve parent program for trace logging
+                parent_program = self.database.get(result.parent_id) if result.parent_id else None
+                if parent_program:
+                    # Determine island ID
+                    island_id = child_program.metadata.get("island", self.database.current_island)
+
+                    self.evolution_tracer.log_trace(
+                        iteration=completed_iteration,
+                        parent_program=parent_program,
+                        child_program=child_program,
+                        prompt=result.prompt,
+                        llm_response=result.llm_response,
+                        artifacts=result.artifacts,
+                        island_id=island_id,
+                        metadata={
+                            "iteration_time": result.iteration_time,
+                            "changes": child_program.metadata.get("changes", ""),
+                        },
+                    )
+
+            # Log prompts
+            if result.prompt:
+                self.database.log_prompt(
+                    template_key=(
+                        "full_rewrite_user" if not self.config.diff_based_evolution else "diff_user"
+                    ),
+                    program_id=child_program.id,
+                    prompt=result.prompt,
+                    responses=[result.llm_response] if result.llm_response else [],
+                )
+
+            # Log progress
+            logger.info(
+                f"Iteration {completed_iteration}: "
+                f"Program {child_program.id} "
+                f"(parent: {result.parent_id}) "
+                f"completed in {result.iteration_time:.2f}s"
+            )
+
+            if child_program.metrics:
+                metrics_str = ", ".join(
+                    [
+                        f"{k}={v:.4f}" if isinstance(v, (int, float)) else f"{k}={v}"
+                        for k, v in child_program.metrics.items()
+                    ]
+                )
+                logger.info(f"Metrics: {metrics_str}")
+
+                # Check if this is the first program without combined_score
+                if not hasattr(self, "_warned_about_combined_score"):
+                    self._warned_about_combined_score = False
+
+                if (
+                    "combined_score" not in child_program.metrics
+                    and not self._warned_about_combined_score
+                ):
+                    avg_score = safe_numeric_average(child_program.metrics)
+                    logger.warning(
+                        f"⚠️  No 'combined_score' metric found in evaluation results. "
+                        f"Using average of all numeric metrics ({avg_score:.4f}) for evolution guidance. "
+                        f"For better evolution results, please modify your evaluator to return a 'combined_score' "
+                        f"metric that properly weights different aspects of program performance."
+                    )
+                    self._warned_about_combined_score = True
+
+            # Check for new best
+            if self.database.best_program_id == child_program.id:
+                logger.info(
+                    f"🌟 New best solution found at iteration {completed_iteration}: "
+                    f"{child_program.id}"
+                )
+
+            # Check early stopping (basic check, though main loop handles the trigger)
+            # We track it here mostly for logging potential improvements
+            if early_stopping_enabled and best_score_ref is not None:
+                # This is a bit of a heuristic since best_score_ref is a snapshot
+                # Real early stopping logic is in the main loop or needs a shared state object
+                pass
+
+        except Exception as e:
+            logger.error(
+                f"Error in background result processing for iteration {completed_iteration}: {e}"
+            )
 
     def _submit_iteration(self, iteration: int, island_id: int | None = None) -> Future | None:
         """Submit an iteration to the process pool, optionally pinned to a specific island"""

@@ -66,7 +66,7 @@ def validate_packing(centers, radii):
         for j in range(i + 1, n):
             dist = np.sqrt(np.sum((centers[i] - centers[j]) ** 2))
             if dist < radii[i] + radii[j] - 1e-6:  # Allow for tiny numerical errors
-                print(f"Circles {i} and {j} overlap: dist={dist}, r1+r2={radii[i]+radii[j]}")
+                print(f"Circles {i} and {j} overlap: dist={dist}, r1+r2={radii[i] + radii[j]}")
                 return False
 
     return True
@@ -285,7 +285,7 @@ def evaluate_stage1(program_path):
     try:
         # Use the simplified subprocess approach
         try:
-            centers, radii, sum_radii = run_with_timeout(program_path, timeout_seconds=600)
+            centers, radii, _sum_radii = run_with_timeout(program_path, timeout_seconds=600)
 
             # Ensure centers and radii are numpy arrays
             if not isinstance(centers, np.ndarray):

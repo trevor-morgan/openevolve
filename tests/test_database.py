@@ -76,7 +76,7 @@ class TestProgramDatabase(unittest.TestCase):
         self.db.add(program1)
         self.db.add(program2)
 
-        parent, inspirations = self.db.sample()
+        parent, _inspirations = self.db.sample()
 
         self.assertIsNotNone(parent)
         self.assertIn(parent.id, ["test1", "test2"])
@@ -588,7 +588,7 @@ class TestProgramDatabase(unittest.TestCase):
         for empty_island in range(4):
             if len(multi_db.islands[empty_island]) == 0:
                 multi_db.set_current_island(empty_island)
-                parent, _ = multi_db.sample()
+                _parent, _ = multi_db.sample()
 
         # Check that no program ID appears in multiple islands
         all_island_programs = {}

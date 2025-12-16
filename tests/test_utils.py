@@ -77,7 +77,7 @@ def start_test_server(
                 return proc, port
         except Exception as e:
             if i < 5:  # Only print for first few attempts to avoid spam
-                print(f"Attempt {i+1}: Waiting for server... ({e})")
+                print(f"Attempt {i + 1}: Waiting for server... ({e})")
             pass
         time.sleep(1)
 

@@ -64,7 +64,7 @@ def validate_packing(centers, radii):
             dist = np.sqrt(np.sum((centers[i] - centers[j]) ** 2))
             if dist < radii[i] + radii[j] - 1e-6:  # Allow for tiny numerical errors
                 overlap = (
-                    f"Circles {i} and {j} overlap: dist={dist:.6f}, r1+r2={radii[i]+radii[j]:.6f}"
+                    f"Circles {i} and {j} overlap: dist={dist:.6f}, r1+r2={radii[i] + radii[j]:.6f}"
                 )
                 validation_details["overlaps"].append(overlap)
                 print(overlap)
@@ -359,7 +359,7 @@ def evaluate_stage1(program_path):
         # Use the simplified subprocess approach
         try:
             start_time = time.time()
-            centers, radii, sum_radii = run_with_timeout(program_path, timeout_seconds=600)
+            centers, radii, _sum_radii = run_with_timeout(program_path, timeout_seconds=600)
             eval_time = time.time() - start_time
 
             # Ensure centers and radii are numpy arrays
@@ -399,7 +399,7 @@ def evaluate_stage1(program_path):
             artifacts = {
                 "execution_time": f"{eval_time:.2f}s",
                 "stage": "quick_validation",
-                "packing_summary": f"Sum: {actual_sum:.6f}, Ratio: {actual_sum/target:.4f}",
+                "packing_summary": f"Sum: {actual_sum:.6f}, Ratio: {actual_sum / target:.4f}",
             }
 
             # Add validation issues if any

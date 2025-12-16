@@ -80,7 +80,7 @@ def create_program(problem: dict[str, Any]) -> str:
     Returns:
         Path to the created program file
     """
-    problem_dir = f'problems/{problem["dataset_identifier"]}/{problem["equation_idx"]}'
+    problem_dir = f"problems/{problem['dataset_identifier']}/{problem['equation_idx']}"
 
     # Parse symbols and properties
     symbols = problem["symbols"]
@@ -156,7 +156,7 @@ def func(x, params):
                         n_features is {num_features}.
                         If n_features is 0, x should be shape (n_samples, 0).
                         The order of columns in x must correspond to:
-                        ({', '.join(input_vars) if input_vars else "None - x has 0 columns"}).
+                        ({", ".join(input_vars) if input_vars else "None - x has 0 columns"}).
         params (np.ndarray): A 1D numpy array of parameters.
                              Expected length: {model_num_params}.
 
@@ -194,7 +194,7 @@ def create_evaluator(problem: dict[str, Any]) -> str:
     Returns:
         Path to the created evaluator file
     """
-    problem_dir = f'problems/{problem["dataset_identifier"]}/{problem["equation_idx"]}'
+    problem_dir = f"problems/{problem['dataset_identifier']}/{problem['equation_idx']}"
     os.makedirs(problem_dir, exist_ok=True)
 
     # Extract data arrays
@@ -527,7 +527,7 @@ def create_config(problem: dict[str, Any]) -> str:
     Returns:
         Path to the created configuration file
     """
-    problem_dir = f'problems/{problem["dataset_identifier"]}/{problem["equation_idx"]}'
+    problem_dir = f"problems/{problem['dataset_identifier']}/{problem['equation_idx']}"
     os.makedirs(problem_dir, exist_ok=True)
     config_file_path = os.path.join(problem_dir, "config.yaml")
 

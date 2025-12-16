@@ -411,7 +411,7 @@ class TestEpistemicArchive(unittest.TestCase):
         mock_program.id = "test_prog"
 
         # Add with prediction
-        was_novel, surprise = archive.add_with_phenotype(
+        _was_novel, surprise = archive.add_with_phenotype(
             mock_program,
             predicted_fitness=0.3,
         )

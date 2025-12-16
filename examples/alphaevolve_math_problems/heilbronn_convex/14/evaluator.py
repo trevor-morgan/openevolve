@@ -55,7 +55,7 @@ def evaluate(program_path: str):
             points = np.array(points)
 
         if points.shape != (NUM_POINTS, 2):
-            raise ValueError(f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS,2)}")
+            raise ValueError(f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS, 2)}")
 
         min_triangle_area = min(
             [triangle_area(p1, p2, p3) for p1, p2, p3 in itertools.combinations(points, 3)]

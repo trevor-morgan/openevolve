@@ -547,3 +547,351 @@ This architecture draws from several research traditions:
 5. **Philosophy of Science**
    - Karl Popper, "The Logic of Scientific Discovery" (1959)
    - Falsificationism as the basis for scientific validity
+
+---
+
+## Module 5: Golden Path (Autonomous Ontological Discovery)
+
+**Purpose**: Discover hidden variables using external tools for TRUE ontological discovery.
+
+**Location**: `openevolve/discovery/golden_path/`
+
+**Key Insight**: The Heisenberg Engine relies on LLM-generated probes, which are limited to concepts the LLM already knows. The Golden Path uses **external discovery tools** (symbolic regression, causal discovery, etc.) to find patterns that don't have names yet.
+
+### Architecture (Dune-themed)
+
+```
+GoldenPath (Orchestrator)
+    │
+    ├── Prescience - Crisis detection, sees when evolution is truly stuck
+    │
+    ├── Mentat - Program mining, extracts patterns from successful programs
+    │
+    ├── DiscoveryToolkit - Orchestrates external discovery tools
+    │   │
+    │   ├── SymbolicRegressionTool (PySR/gplearn)
+    │   │   └── Discovers mathematical formulas from data
+    │   │
+    │   ├── CausalDiscoveryTool (DoWhy/causal-learn)
+    │   │   └── Finds causal relationships, not just correlations
+    │   │
+    │   ├── CodeAnalysisTool (Python AST)
+    │   │   └── Structural patterns in code
+    │   │
+    │   ├── WebResearchTool (arXiv, Semantic Scholar)
+    │   │   └── Searches scientific literature
+    │   │
+    │   └── WolframTool (Wolfram Alpha API)
+    │       └── Mathematical insights and solutions
+    │
+    ├── SietchFinder - Proposes hidden variables from patterns + tool outputs
+    │
+    ├── GomJabbar - Validates discoveries with rigorous statistics
+    │
+    └── SpiceAgony - Integrates validated variables into the system
+```
+
+### Key Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `GoldenPath` | `golden_path.py` | Main orchestrator |
+| `GoldenPathConfig` | `golden_path.py` | Configuration |
+| `Prescience` | `prescience.py` | Crisis detection |
+| `CrisisType` | `prescience.py` | Types: ONTOLOGY_GAP, LOCAL_OPTIMUM, etc. |
+| `Mentat` | `mentat.py` | Pattern mining from programs |
+| `SietchFinder` | `sietch_finder.py` | Hidden variable discovery |
+| `HiddenVariable` | `sietch_finder.py` | Represents a discovered variable |
+| `GomJabbar` | `gom_jabbar.py` | Statistical validation |
+| `ValidationResult` | `gom_jabbar.py` | Validation outcome |
+| `SpiceAgony` | `spice_agony.py` | Runtime variable injection |
+| `DiscoveryToolkit` | `toolkit.py` | Tool orchestration |
+| `DiscoveryTool` | `toolkit.py` | Base class for tools |
+| `Discovery` | `toolkit.py` | Tool output |
+
+### Discovery Flow
+
+```
+1. Normal Evolution
+   │
+   ▼
+2. Prescience monitors for crises
+   │  ├─ LOCAL_OPTIMUM: Population converged, need diversity
+   │  ├─ ONTOLOGY_GAP: Model cannot represent solution ← TRIGGERS GOLDEN PATH
+   │  ├─ COMPLEXITY_BARRIER: Programs too complex
+   │  └─ CATASTROPHIC: Major failure detected
+   │
+   ▼ (if ONTOLOGY_GAP detected)
+3. Mentat mines programs for structural patterns
+   │  └─ Extracts: function count, loop depth, numeric ranges, etc.
+   │
+   ▼
+4. DiscoveryToolkit runs external tools
+   │  ├─ Symbolic Regression: fitness ~ f(features)
+   │  ├─ Causal Discovery: X → Y relationships
+   │  └─ Code Analysis: AST patterns
+   │
+   ▼
+5. SietchFinder proposes hidden variables
+   │  └─ Combines patterns + tool outputs + LLM hypotheses
+   │
+   ▼
+6. GomJabbar validates each hypothesis
+   │  ├─ Correlation test (r > 0.15)
+   │  ├─ Statistical significance (p < 0.05)
+   │  ├─ Incremental R² (adds explanatory power)
+   │  ├─ Cross-validation (robust across folds)
+   │  └─ Bootstrap CI (confidence interval excludes zero)
+   │
+   ▼
+7. SpiceAgony integrates validated variables
+   │  ├─ Runtime injection (no file changes)
+   │  └─ Evaluator modification (optional)
+   │
+   ▼
+8. Evolution continues with expanded ontology
+```
+
+### DiscoveryToolkit: External Tools
+
+The toolkit allows integrating external frameworks for true discovery:
+
+| Tool | Backend | Discovers |
+|------|---------|-----------|
+| `SymbolicRegressionTool` | PySR, gplearn, numpy | Mathematical formulas: `fitness ~ sqrt(x) * log(y)` |
+| `CausalDiscoveryTool` | DoWhy, causal-learn, numpy | Causal graphs, intervention effects |
+| `CodeAnalysisTool` | Python AST | Structural patterns in code |
+| `WebResearchTool` | aiohttp | Papers from arXiv, Semantic Scholar |
+| `WolframTool` | aiohttp | Analytical solutions via Wolfram Alpha |
+
+**Adding Custom Tools**:
+
+```python
+from openevolve.discovery.golden_path import DiscoveryTool, Discovery, DiscoveryType, ToolContext
+
+class MyCustomTool(DiscoveryTool):
+    name = "my_tool"
+    description = "My custom discovery tool"
+    discovery_types = [DiscoveryType.HYPOTHESIS]
+    dependencies = ["my_package"]
+
+    async def discover(self, context: ToolContext) -> List[Discovery]:
+        # Analyze context.programs
+        # Return discoveries with computation_code for validation
+        return [
+            Discovery(
+                name="my_discovery",
+                description="Found interesting pattern",
+                discovery_type=DiscoveryType.HYPOTHESIS,
+                content={"key": "value"},
+                computation_code="def compute_my_discovery(code, metrics): ...",
+                confidence=0.7,
+            )
+        ]
+
+# Register with toolkit
+toolkit.register_tool(MyCustomTool())
+```
+
+### Validation (GomJabbar)
+
+Every hypothesis undergoes rigorous validation:
+
+| Test | Threshold | Purpose |
+|------|-----------|---------|
+| Correlation | \|r\| > 0.15 | Does it relate to fitness? |
+| P-value | p < 0.05 | Is it statistically significant? |
+| Incremental R² | ΔR² > 0.02 | Does it add information beyond existing metrics? |
+| Cross-validation | CV > 0.6 | Is it robust across data splits? |
+| Bootstrap CI | Excludes 0 | Is the effect reliable? |
+| Computation success | > 80% | Can we compute it for most programs? |
+
+### Configuration
+
+```yaml
+discovery:
+  golden_path:
+    enabled: true
+
+    # Prescience (Crisis Detection)
+    prescience_short_window: 10
+    prescience_medium_window: 30
+    prescience_long_window: 100
+    gradient_threshold: 0.001
+    variance_threshold: 0.0001
+    diversity_threshold: 0.3
+
+    # Mentat (Pattern Mining)
+    min_programs_for_analysis: 20
+    top_n_patterns: 10
+    min_correlation_threshold: 0.3
+    min_discriminative_power: 0.2
+
+    # SietchFinder (Hidden Variable Discovery)
+    max_hypotheses_per_round: 5
+    use_pattern_mining: true
+    use_llm_hypothesis: true
+    use_domain_templates: true
+
+    # GomJabbar (Validation)
+    validation_min_correlation: 0.15
+    validation_max_p_value: 0.05
+    validation_min_incremental_r2: 0.02
+    validation_cv_folds: 5
+    validation_bootstrap_iterations: 100
+
+    # SpiceAgony (Integration)
+    auto_integrate: true
+    default_variable_weight: 0.1
+
+    # Orchestration
+    min_programs_for_discovery: 30
+    max_discovery_rounds: 5
+    cooldown_after_discovery: 20
+
+    # Output
+    save_discoveries_to_file: true
+    discoveries_output_path: "golden_path_discoveries.py"
+```
+
+### Example: Discovering Hidden Physics
+
+```
+Problem: Optimize magnetic mirror coil configuration
+
+1. Evolution reaches fitness 0.85, plateaus
+2. Prescience detects ONTOLOGY_GAP (high confidence)
+3. Golden Path activates:
+
+   Mentat: Found 8 patterns
+     - n_coils correlates with fitness (r=0.45)
+     - code_length correlates with fitness (r=0.38)
+
+   DiscoveryToolkit:
+     - Symbolic Regression: fitness ~ 0.3 + 0.1*sqrt(n_coils)
+     - Causal Discovery: n_coils → fitness (partial r=0.42)
+     - Code Analysis: 12 correlated structural patterns
+
+   SietchFinder: Proposed 7 hidden variables
+
+   GomJabbar: Validated 3/7 variables
+     ✓ coil_count (r=0.45, incr_r2=0.15)
+     ✓ symmetry_index (r=0.38, incr_r2=0.08)
+     ✗ random_metric (r=0.05, failed correlation test)
+
+   SpiceAgony: Integrated 2 new variables
+
+4. Evolution resumes with expanded ontology
+5. Fitness improves: 0.85 → 0.93
+```
+
+### Key Difference from Heisenberg
+
+| Aspect | Heisenberg Engine | Golden Path |
+|--------|-------------------|-------------|
+| Discovery method | LLM-generated probes | External tools + LLM |
+| Pattern source | Artifacts analysis | Code structure + metrics |
+| Validation | 5 trials, correlation | Full statistical battery |
+| Variables found | Named concepts LLM knows | Mathematical relationships (nameless) |
+| Integration | Ontology expansion | Runtime injection |
+
+The Golden Path finds patterns **that don't have names** - they emerge from data, not from human concepts.
+
+---
+
+## File Structure (Updated)
+
+```
+openevolve/
+├── discovery/
+│   ├── __init__.py              # Public API
+│   ├── problem_space.py         # ProblemSpace, ProblemEvolver
+│   ├── skeptic.py               # AdversarialSkeptic
+│   ├── epistemic_archive.py     # Phenotype, EpistemicArchive
+│   ├── engine.py                # DiscoveryEngine (main integration)
+│   │
+│   │   # Heisenberg Engine (Ontological Expansion)
+│   ├── ontology.py              # Variable, Ontology, OntologyManager
+│   ├── crisis_detector.py       # EpistemicCrisis, CrisisDetector
+│   ├── instrument_synthesizer.py # Probe, InstrumentSynthesizer
+│   ├── code_instrumenter.py     # CodeInstrumenter
+│   │
+│   │   # Golden Path (Autonomous Ontological Discovery)
+│   └── golden_path/
+│       ├── __init__.py          # Public API
+│       ├── golden_path.py       # GoldenPath orchestrator
+│       ├── prescience.py        # Crisis detection
+│       ├── mentat.py            # Pattern mining
+│       ├── sietch_finder.py     # Hidden variable discovery
+│       ├── gom_jabbar.py        # Statistical validation
+│       ├── spice_agony.py       # Variable integration
+│       ├── toolkit.py           # DiscoveryToolkit orchestrator
+│       │
+│       └── tools/               # External discovery tools
+│           ├── __init__.py
+│           ├── symbolic_regression.py  # PySR/gplearn
+│           ├── causal_discovery.py     # DoWhy/causal-learn
+│           ├── code_analysis.py        # AST analysis
+│           ├── web_research.py         # arXiv, Semantic Scholar
+│           └── wolfram.py              # Wolfram Alpha
+│
+├── examples/
+│   ├── discovery_mode/          # Discovery mode demo
+│   ├── heisenberg_demo/         # Heisenberg Engine demo
+│   └── magnetic_mirror_frc/     # Golden Path demo (fusion optimization)
+│
+└── docs/
+    └── DISCOVERY_MODE_ARCHITECTURE.md  # This document
+```
+
+---
+
+## Implementation Status
+
+### Phase 1: Core Modules (Complete)
+- [x] ProblemSpace and ProblemEvolver
+- [x] AdversarialSkeptic
+- [x] EpistemicArchive with phenotype tracking
+- [x] DiscoveryEngine integration
+
+### Phase 2: Deep Integration (Complete)
+- [x] Modify Controller.run() to call DiscoveryEngine
+- [x] Add discovery config to main Config class
+- [x] Integrate problem context into prompt templates
+- [x] Add discovery metrics to evolution trace
+
+### Phase 3: Heisenberg Engine (Complete)
+- [x] Crisis detection (plateau, bias, variance)
+- [x] Probe synthesis with LLM
+- [x] Code instrumentation for tracing
+- [x] Statistical validation of discoveries
+- [x] Ontology expansion with soft reset
+- [x] Checkpoint/resume support
+
+### Phase 4: Golden Path (Complete)
+- [x] Prescience crisis detection
+- [x] Mentat pattern mining
+- [x] SietchFinder hidden variable discovery
+- [x] GomJabbar statistical validation
+- [x] SpiceAgony runtime integration
+- [x] DiscoveryToolkit orchestration
+- [x] Symbolic regression tool (PySR/gplearn/numpy)
+- [x] Causal discovery tool (DoWhy/causal-learn/numpy)
+- [x] Code analysis tool (Python AST)
+- [x] Web research tool (arXiv, Semantic Scholar)
+- [x] Wolfram tool (Wolfram Alpha API)
+
+### Phase 5: Advanced Features (Planned)
+- [ ] Blind reproduction test with separate LLM
+- [ ] Adaptive attack selection based on history
+- [ ] Cross-run knowledge transfer
+- [ ] Multi-objective problem evolution
+- [ ] Custom tool plugin system
+
+### Phase 6: Tooling (Planned)
+- [ ] Visualizer for problem evolution tree
+- [ ] Discovery event timeline UI
+- [ ] Phenotype space explorer
+- [ ] Surprise heatmaps
+- [ ] Ontology lineage visualizer
+- [ ] Golden Path discovery dashboard

@@ -77,7 +77,7 @@ def run():
     best_set_np = None
 
     for i in range(hypers.num_restarts):
-        print(f"\n{'='*20} Restart {i+1}/{hypers.num_restarts} {'='*20}")
+        print(f"\n{'=' * 20} Restart {i + 1}/{hypers.num_restarts} {'=' * 20}")
         restart_key, main_key = jax.random.split(main_key)
         loss, u_set_np = run_single_trial(hypers, restart_key)
 

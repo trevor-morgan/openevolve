@@ -72,7 +72,7 @@ class TestProcessParallelFix(unittest.TestCase):
             len(sample_from_island_called), 1, "sample_from_island should be called exactly once"
         )
 
-        call_args, call_kwargs = sample_from_island_called[0]
+        _call_args, call_kwargs = sample_from_island_called[0]
         self.assertIn("island_id", call_kwargs)
         self.assertEqual(
             call_kwargs["island_id"], 3, "sample_from_island should be called with island_id=3"
@@ -128,7 +128,7 @@ class TestProcessParallelFix(unittest.TestCase):
 
         # Sample from different islands
         for island_id in range(5):
-            parent, inspirations = self.database.sample_from_island(
+            _parent, _inspirations = self.database.sample_from_island(
                 island_id=island_id, num_inspirations=3
             )
 

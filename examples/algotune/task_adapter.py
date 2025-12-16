@@ -505,14 +505,14 @@ The solve method will be improved through evolution.
 """
 {imports}
 
-class {class_info['name']}:
+class {class_info["name"]}:
     """
     Initial implementation of {task_name} task.
     This will be evolved by OpenEvolve to improve performance and correctness.
     """
 
     def __init__(self):
-        """Initialize the {class_info['name']}."""
+        """Initialize the {class_info["name"]}."""
 {init_method_body}
 
     def solve(self, problem):
@@ -561,7 +561,7 @@ def run_solver(problem):
     Returns:
         The solution
     """
-    solver = {class_info['name']}()
+    solver = {class_info["name"]}()
     return solver.solve(problem)
 
 # EVOLVE-BLOCK-END
@@ -634,7 +634,7 @@ if setup_algotune_paths():
     try:
         from AlgoTuneTasks.base import TASK_REGISTRY
         # Import the specific {task_name} task to register it
-        from AlgoTuneTasks.{task_name}.{task_name} import {class_info['name']}
+        from AlgoTuneTasks.{task_name}.{task_name} import {class_info["name"]}
         print("Successfully imported AlgoTune tasks and {task_name}")
     except ImportError as e:
         print(f"Error: Could not import AlgoTune tasks: {{e}}")
@@ -970,7 +970,7 @@ def evaluate(program_path, config=None):
                     try:
                         # Use the evolved program's own is_solution method for validation
                         # This ensures consistency between the extracted solve and validation logic
-                        evolved_solver = program.{class_info['name']}()
+                        evolved_solver = program.{class_info["name"]}()
                         is_valid = evolved_solver.is_solution(problem, evolved_solution)
                         correctness_score = 1.0 if is_valid else 0.0
                     except Exception as e:

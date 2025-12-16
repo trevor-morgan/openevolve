@@ -548,11 +548,11 @@ Given this comprehensive overview of the current state and future directions of 
 
     def run_single_benchmark(self, config: BenchmarkConfig) -> BenchmarkResult:
         """Run a single benchmark configuration with proper warmup"""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running: {config.name}")
         print(f"Description: {config.description}")
         print(f"Max tokens: {config.max_tokens}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Performance measurement parameters
         WARMUP_RUNS = 2  # Warmup runs to eliminate cold start effects
@@ -585,20 +585,20 @@ Given this comprehensive overview of the current state and future directions of 
             print(f"🔥 Running {WARMUP_RUNS} warmup runs to eliminate cold start effects...")
             for i in range(WARMUP_RUNS):
                 try:
-                    print(f"   Warmup run {i+1}/{WARMUP_RUNS}...")
+                    print(f"   Warmup run {i + 1}/{WARMUP_RUNS}...")
                     warmup_result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
                     if warmup_result.returncode != 0:
-                        print(f"   ⚠️  Warmup run {i+1} failed: {warmup_result.stderr[:100]}...")
+                        print(f"   ⚠️  Warmup run {i + 1} failed: {warmup_result.stderr[:100]}...")
                     else:
-                        print(f"   ✅ Warmup run {i+1} completed")
+                        print(f"   ✅ Warmup run {i + 1} completed")
 
                     # Clear cache between warmup runs
                     mx.clear_cache()
 
                 except subprocess.TimeoutExpired:
-                    print(f"   ⏰ Warmup run {i+1} timed out")
+                    print(f"   ⏰ Warmup run {i + 1} timed out")
                 except Exception as e:
-                    print(f"   ❌ Warmup run {i+1} error: {e}")
+                    print(f"   ❌ Warmup run {i + 1} error: {e}")
 
             print(f"📊 Running {MEASUREMENT_RUNS} measurement runs...")
 
@@ -606,7 +606,7 @@ Given this comprehensive overview of the current state and future directions of 
             successful_results = []
             for run_idx in range(MEASUREMENT_RUNS):
                 try:
-                    print(f"   Measurement run {run_idx+1}/{MEASUREMENT_RUNS}...")
+                    print(f"   Measurement run {run_idx + 1}/{MEASUREMENT_RUNS}...")
 
                     # Clear cache before each measurement run for consistency
                     mx.clear_cache()
@@ -618,7 +618,9 @@ Given this comprehensive overview of the current state and future directions of 
                     end_time = time.perf_counter()
 
                     if result.returncode != 0:
-                        print(f"   ❌ Measurement run {run_idx+1} failed: {result.stderr[:100]}...")
+                        print(
+                            f"   ❌ Measurement run {run_idx + 1} failed: {result.stderr[:100]}..."
+                        )
                         continue
 
                     # Parse output
@@ -629,15 +631,15 @@ Given this comprehensive overview of the current state and future directions of 
                     if parsed_result:
                         successful_results.append(parsed_result)
                         print(
-                            f"   ✅ Run {run_idx+1}: {parsed_result.decode_tokens_per_sec:.1f} tokens/sec"
+                            f"   ✅ Run {run_idx + 1}: {parsed_result.decode_tokens_per_sec:.1f} tokens/sec"
                         )
                     else:
-                        print(f"   ❌ Run {run_idx+1}: Failed to parse output")
+                        print(f"   ❌ Run {run_idx + 1}: Failed to parse output")
 
                 except subprocess.TimeoutExpired:
-                    print(f"   ⏰ Measurement run {run_idx+1} timed out")
+                    print(f"   ⏰ Measurement run {run_idx + 1} timed out")
                 except Exception as e:
-                    print(f"   ❌ Measurement run {run_idx+1} error: {e}")
+                    print(f"   ❌ Measurement run {run_idx + 1} error: {e}")
 
             # Require at least 2 successful runs for reliable results
             if len(successful_results) < 2:
@@ -685,7 +687,7 @@ Given this comprehensive overview of the current state and future directions of 
 
             if len(decode_speeds) > 1:
                 print(
-                    f"  Performance consistency: {np.std(decode_speeds)/np.mean(decode_speeds)*100:.1f}% CV"
+                    f"  Performance consistency: {np.std(decode_speeds) / np.mean(decode_speeds) * 100:.1f}% CV"
                 )
 
             return final_result
@@ -762,12 +764,12 @@ Given this comprehensive overview of the current state and future directions of 
 
     def run_full_benchmark_suite(self) -> dict:
         """Run the complete benchmark suite"""
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print("Qwen3-0.6B Comprehensive Benchmark Suite")
         print(f"Model: {self.model_path}")
         print("Hardware: Apple M4 24GB")
         print("Target: Custom Metal kernel optimization validation")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
 
         configs = self.create_benchmark_configs()
         results = []
@@ -896,11 +898,11 @@ Given this comprehensive overview of the current state and future directions of 
                     ]
                 )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Results saved to:")
         print(f"  - qwen3_benchmark_results_{timestamp}.json")
         print(f"  - qwen3_benchmark_results_{timestamp}.csv")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
     def _result_to_dict(self, result: BenchmarkResult) -> dict:
         """Convert BenchmarkResult to dictionary"""
@@ -923,13 +925,13 @@ Given this comprehensive overview of the current state and future directions of 
             print("No benchmark results available")
             return
 
-        print(f"\n{'='*120}")
+        print(f"\n{'=' * 120}")
         print(f"{'Benchmark Summary':^120}")
-        print(f"{'='*120}")
+        print(f"{'=' * 120}")
         print(
             f"{'Name':<25} {'Tokens':<8} {'Prefill':<10} {'Decode':<10} {'Overall':<10} {'Memory':<8} {'Time':<8}"
         )
-        print(f"{'='*120}")
+        print(f"{'=' * 120}")
 
         for result in self.results:
             print(
@@ -942,7 +944,7 @@ Given this comprehensive overview of the current state and future directions of 
                 f"{result.total_time_sec:<8.1f}"
             )
 
-        print(f"{'='*120}")
+        print(f"{'=' * 120}")
 
         # Summary statistics
         decode_speeds = [
@@ -964,11 +966,11 @@ def main():
     results = benchmark_suite.run_full_benchmark_suite()
     benchmark_suite.print_summary_table()
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("Benchmark Suite Complete!")
     print("These results will serve as baseline for Metal kernel optimization validation.")
     print("Target: Improve decode speed by 10%+ through evolved custom Metal kernels")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     return results
 

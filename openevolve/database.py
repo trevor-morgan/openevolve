@@ -192,9 +192,15 @@ class ProgramDatabase:
         from openevolve.embedding import EmbeddingClient
 
         self.novelty_llm = novelty_llm
-        self.embedding_client = (
-            EmbeddingClient(config.embedding_model) if config.embedding_model else None
-        )
+        if config.embedding_model:
+            self.embedding_client = EmbeddingClient(
+                model=config.embedding_model,
+                vector_store_type=getattr(config, "vector_store_type", "memory"),
+                host=getattr(config, "milvus_host", "localhost"),
+                port=getattr(config, "milvus_port", "19530"),
+            )
+        else:
+            self.embedding_client = None
         self.similarity_threshold = config.similarity_threshold
 
         # Cache LLM novelty judgements to avoid repeated expensive calls
@@ -206,6 +212,95 @@ class ProgramDatabase:
         self.rl_policy: PolicyLearner | None = None
         self._last_rl_action: SelectionAction | None = None
         self._last_parent_fitness: float | None = None
+
+    def update_feature_dimensions(self, new_dimensions: list[str]) -> None:
+        """
+        Update the feature dimensions for MAP-Elites and re-bin the population.
+
+        This allows dynamic adaptation of the search space as new variables are discovered.
+
+        Args:
+            new_dimensions: New list of feature dimensions
+        """
+        if self.config.feature_dimensions == new_dimensions:
+            return
+
+        logger.info(
+            f"Updating MAP-Elites dimensions: {self.config.feature_dimensions} -> {new_dimensions}"
+        )
+
+        self.config.feature_dimensions = new_dimensions
+
+        # Update bins for new dimensions
+        for dim in new_dimensions:
+            if dim not in self.feature_bins_per_dim:
+                self.feature_bins_per_dim[dim] = self.feature_bins
+
+        # Clear existing feature maps
+        self.island_feature_maps = [{} for _ in range(self.config.num_islands)]
+
+        # Re-bin all programs
+        rebin_count = 0
+        for program in self.programs.values():
+            # Calculate new coordinates
+            try:
+                feature_coords = self._calculate_feature_coords(program)
+                feature_key = self._feature_coords_to_key(feature_coords)
+
+                # Get program's island
+                island_idx = program.metadata.get("island", self.current_island) % len(self.islands)
+                island_map = self.island_feature_maps[island_idx]
+
+                # Update map if this program is better or cell is empty
+                should_replace = feature_key not in island_map
+                if not should_replace:
+                    existing_id = island_map[feature_key]
+                    if existing_id in self.programs:
+                        existing = self.programs[existing_id]
+                        if self._is_better(program, existing):
+                            should_replace = True
+                    else:
+                        should_replace = True
+
+                if should_replace:
+                    island_map[feature_key] = program.id
+
+                rebin_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to re-bin program {program.id}: {e}")
+
+        logger.info(f"Re-binned {rebin_count} programs into new feature grid")
+
+    def add_to_graveyard(self, program_data: dict[str, Any], error_message: str) -> None:
+        """
+        Save a failed program to the graveyard for negative data collection.
+
+        Args:
+            program_data: Dictionary representation of the failed program
+            error_message: The error that caused failure
+        """
+        if not self.config.db_path:
+            return
+
+        graveyard_dir = os.path.join(self.config.db_path, "graveyard")
+        os.makedirs(graveyard_dir, exist_ok=True)
+
+        program_id = program_data.get("id", str(uuid.uuid4()))
+
+        # Enrich data with failure info
+        save_data = program_data.copy()
+        save_data["failure_info"] = {
+            "error_message": error_message,
+            "timestamp": time.time(),
+            "failure_type": "evaluation_error",
+        }
+
+        file_path = os.path.join(graveyard_dir, f"{program_id}.json")
+        try:
+            with open(file_path, "w") as f:
+                json.dump(save_data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save to graveyard: {e}")
 
     def add(self, program: Program, iteration: int = None, target_island: int | None = None) -> str:
         """
@@ -227,6 +322,10 @@ class ProgramDatabase:
             self.last_iteration = max(self.last_iteration, iteration)
 
         self.programs[program.id] = program
+
+        # Index in vector store for scalable retrieval
+        if self.embedding_client:
+            self.embedding_client.add_program(program)
 
         # Calculate feature coordinates for MAP-Elites
         feature_coords = self._calculate_feature_coords(program)
@@ -1389,46 +1488,77 @@ class ProgramDatabase:
             len(to_remove),
         )
 
-    def _is_novel(self, program_id: int, island_idx: int) -> bool:
+    def _is_novel(self, program_id: str, island_idx: int) -> bool:
         """
-        Determine if a program is novel based on diversity to existing programs
+        Determine if a program is novel based on diversity to existing programs.
+        Uses vector store search for efficiency.
 
         Args:
-            program: Program to check
+            program_id: Program ID to check
             island_idx: Island index
 
         Returns:
             True if novel, False otherwise
         """
         if self.embedding_client is None or self.similarity_threshold <= 0.0:
-            # Novelty checking disabled
             return True
 
         program = self.programs[program_id]
-        embd = self.embedding_client.get_embedding(program.code)
-        self.programs[program_id].embedding = embd
+
+        # Ensure embedding exists
+        if program.embedding is None:
+            program.embedding = self.embedding_client.get_embedding(program.code)
+
+        # Search for nearest neighbors using vector store
+        # We ask for 2 candidates to handle the case where the program itself is indexed
+        hits = self.embedding_client.find_similar(
+            program.code,
+            limit=2,
+            filters=f"island == {island_idx}"
+            if getattr(self.config, "vector_store_type", "memory") == "milvus"
+            else None,
+        )
 
         max_smlty = float("-inf")
         max_smlty_pid = None
 
-        for pid in self.islands[island_idx]:
-            other = self.programs[pid]
-
-            if other.embedding is None:
-                logger.warning("Program %s has no embedding, skipping similarity check", other.id)
+        for hit in hits:
+            if hit["id"] == program_id:
                 continue
 
-            similarity = self._cosine_similarity(embd, other.embedding)
+            # Manual filtering for memory store
+            if getattr(self.config, "vector_store_type", "memory") == "memory":
+                hit_island = hit["metadata"].get("island")
+                if hit_island is not None and int(hit_island) != island_idx:
+                    continue
 
-            if similarity >= max(max_smlty, self.similarity_threshold):
-                max_smlty = similarity
-                max_smlty_pid = pid
+            if hit["score"] > max_smlty:
+                max_smlty = hit["score"]
+                max_smlty_pid = hit["id"]
+
+        # Fallback to linear scan if vector store is empty/cold but island isn't
+        if max_smlty == float("-inf"):
+            embd = program.embedding
+            for pid in self.islands[island_idx]:
+                if pid == program_id:
+                    continue
+                other = self.programs[pid]
+                if other.embedding is None:
+                    continue
+                sim = self._cosine_similarity(embd, other.embedding)
+                if sim > max_smlty:
+                    max_smlty = sim
+                    max_smlty_pid = pid
 
         if max_smlty_pid is None:
-            # No similar programs found, consider it novel
+            # No similar programs found
             return True
 
-        return self._llm_judge_novelty(program, self.programs[max_smlty_pid])
+        if max_smlty >= self.similarity_threshold:
+            # Found a match, use LLM judge
+            return self._llm_judge_novelty(program, self.programs[max_smlty_pid])
+
+        return True
 
     def _is_better(self, program1: Program, program2: Program) -> bool:
         """

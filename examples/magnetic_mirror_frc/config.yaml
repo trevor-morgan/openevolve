@@ -1,0 +1,273 @@
+# Configuration for Magnetic Mirror / FRC Optimization
+# Evolving coil configurations for plasma confinement
+
+max_iterations: 50
+checkpoint_interval: 10
+
+# LLM configuration - CLIProxyAPI setup
+llm:
+  # For CLIProxyAPI (Claude Max / ChatGPT Pro / Gemini):
+  primary_model: "claude-opus-4-5-20251101"
+  primary_model_weight: 0.8
+  secondary_model: "gemini-3-pro-preview"
+  secondary_model_weight: 0.2
+  api_base: "http://localhost:8317/v1"
+  api_key: "your-api-key-1"  # Default CLIProxyAPI key from ~/cliproxyapi/config.yaml
+
+  # Alternative: Direct OpenAI (uncomment and set OPENAI_API_KEY env var)
+  # primary_model: "gpt-4o"
+  # api_base: "https://api.openai.com/v1"
+  # api_key: "${OPENAI_API_KEY}"
+
+  temperature: 0.8  # Higher for creative exploration of coil configurations
+  max_tokens: 16000
+  timeout: 180  # Longer timeout for complex physics reasoning
+
+# Prompt configuration with plasma physics context
+prompt:
+  system_message: |
+    You are an expert plasma physicist and fusion reactor designer specializing in magnetic confinement.
+    Your task is to evolve magnetic coil configurations for a magnetic mirror / field-reversed configuration (FRC) fusion device.
+
+    PHYSICS BACKGROUND:
+    - Magnetic mirrors confine plasma using high-field "mirror" regions that reflect charged particles
+    - The mirror ratio R = B_max/B_min determines the loss cone angle: sin²(θ) = 1/R
+    - Higher mirror ratio = smaller loss cone = better confinement
+    - MHD stability requires a "magnetic well" (minimum-B configuration) where field increases radially
+    - The magnetic well depth U = (B_edge - B_center) / B_center should be POSITIVE for stability
+
+    DESIGN PRINCIPLES:
+    1. Mirror coils at ends create high-field reflection regions
+    2. Central region should have lower, uniform field for plasma equilibrium
+    3. Quadrupole or other multipole coils can create minimum-B for stability
+    4. Baseball or yin-yang coil geometries have been used historically
+    5. Modern approaches: Gas Dynamic Trap, tandem mirrors, FRC compression
+
+    OPTIMIZATION TARGETS:
+    - Maximize mirror ratio (target: R > 5, excellent: R > 10)
+    - Achieve positive magnetic well (target: U > 0.1)
+    - Maintain field uniformity in central region
+    - Maximize particle confinement time
+    - Keep engineering parameters realistic (currents < 10 MA)
+
+    ADVANCED CONCEPTS TO EXPLORE:
+    - Tandem mirror configurations with thermal barriers
+    - Minimum-B anchors (baseball coils, yin-yang coils)
+    - Field-reversed configurations (FRC) with closed field lines
+    - Axial plasma plugs using mirror cells
+    - Magnetic cusps for stability
+
+    The CoilSet class allows adding circular coils with:
+    - z: axial position (meters)
+    - radius: coil radius (meters)
+    - current: coil current (Amperes, can be negative for reverse field)
+
+    Be creative! The best fusion configurations were discovered through innovative thinking.
+
+# Database configuration
+database:
+  population_size: 30
+  archive_size: 15
+  num_islands: 3
+  elite_selection_ratio: 0.2
+  exploitation_ratio: 0.6  # Balance exploration vs exploitation
+
+  # Embedding for diversity (disabled - CLIProxyAPI doesn't support embeddings)
+  # To enable: set OPENAI_API_KEY env var and uncomment:
+  # embedding_model: "text-embedding-3-small"
+  similarity_threshold: 0.95
+
+# Evaluator configuration
+evaluator:
+  timeout: 120
+  # IMPORTANT: Disable OpenEvolve's cascade mode - we handle cascading internally
+  # in our evaluate() function. OpenEvolve's cascade mode would call evaluate_stage1()
+  # directly with a file path, but our functions expect a config dict.
+  cascade_evaluation: false
+  parallel_evaluations: 2
+
+# Evolution settings
+diff_based_evolution: true
+max_code_length: 30000
+
+# Feature dimensions for MAP-Elites (optional)
+# Enables diversity in solution space
+feature_dimensions:
+  - name: "mirror_ratio"
+    min: 1.0
+    max: 20.0
+    bins: 10
+  - name: "well_depth"
+    min: -0.5
+    max: 0.5
+    bins: 10
+
+# ============================================================================
+# DISCOVERY MODE - Evolve the problem, not just solutions
+# ============================================================================
+discovery:
+  enabled: true
+
+  problem_description: |
+    Design a magnetic field configuration for plasma confinement in a fusion device.
+    The goal is to maximize particle confinement time while maintaining MHD stability.
+
+    Current approach: Magnetic mirror with circular coils.
+
+    Key physics: Mirror ratio determines loss cone, magnetic well provides stability.
+
+    Potential evolution directions:
+    - Add quadrupole coils for minimum-B
+    - Create tandem mirror with thermal barriers
+    - Explore field-reversed configurations (FRC)
+    - Investigate axisymmetric vs non-axisymmetric geometries
+
+  # Problem Evolution - make the problem harder as we solve it
+  problem_evolution_enabled: true
+  evolve_problem_after_solutions: 5  # Evolve after 5 good solutions
+
+  # Adversarial Skeptic - DISABLED for now
+  # The generic attacks don't understand physics function signatures
+  # TODO: Add domain-specific skeptic plugins for fusion physics
+  skeptic_enabled: false
+  # skeptic:
+  #   num_attack_rounds: 2
+  #   attack_timeout: 15.0
+  #   static_analysis_enabled: true
+
+  # Surprise Tracking - drive exploration via unexpected results
+  surprise_tracking_enabled: true
+  curiosity_sampling_enabled: true
+  surprise_bonus_threshold: 0.1
+
+  solution_threshold: 0.8  # Programs above this are "solutions"
+
+  # ============================================================================
+  # HEISENBERG ENGINE - Discover hidden physics variables
+  # ============================================================================
+  heisenberg:
+    enabled: true
+
+    # Crisis detection - when are we stuck?
+    # NOTE: Lowered thresholds to trigger collaborative discovery faster
+    min_plateau_iterations: 8         # Detect plateau after 8 iterations (was 15)
+    fitness_improvement_threshold: 0.005  # 0.5% improvement threshold (was 1%)
+    variance_window: 8
+    crisis_confidence_threshold: 0.5  # Lower threshold (was 0.7)
+    cooldown_iterations: 5            # Shorter cooldown (was 10)
+
+    # Probe synthesis - hypothesize hidden variables
+    # For fusion physics, this could discover:
+    # - Field line curvature effects
+    # - Thermal barrier depth
+    # - Radial electric field shear
+    # - Plasma beta coupling
+    max_probes_per_crisis: 3
+    probe_timeout: 45.0
+
+    # Validation
+    validation_trials: 3
+    min_correlation_threshold: 0.4
+
+    # Ontology limits
+    max_ontology_generations: 3
+    max_variables_per_ontology: 15
+
+    # Soft reset when stuck
+    programs_to_keep_on_reset: 3
+
+    # Auto-instrument evolved code
+    auto_instrument: true
+    instrumentation_level: "standard"
+
+    # ============================================================================
+    # COLLABORATIVE DISCOVERY - Multi-Agent Novel Physics Generation
+    # ============================================================================
+    # Instead of probe-based discovery, use a team of specialized agents:
+    # - Theorist: Proposes new physics from first principles
+    # - Experimentalist: Designs tests and measurements
+    # - Skeptic: Challenges ideas, finds flaws
+    # - Synthesizer: Combines insights into working code
+    #
+    # The agents debate in rounds, building on each other while challenging
+    # assumptions. The goal is to discover physics that DOESN'T EXIST in
+    # textbooks - truly novel ideas generated through adversarial collaboration.
+    collaborative_discovery_enabled: true
+    max_debate_rounds: 4
+    min_consensus_for_synthesis: 0.5  # Lower threshold for exploratory runs
+    elimination_threshold: 0.25
+
+    # Domain context for the agents (more detail = better ideas)
+    domain_context: |
+      DOMAIN: Magnetic Mirror / Field-Reversed Configuration (FRC) Fusion
+
+      CURRENT PHYSICS BEING MODELED:
+      - Mirror ratio (B_max/B_min) - determines loss cone angle
+      - Magnetic well depth - MHD stability criterion
+      - Field uniformity in central region
+      - Particle confinement via guiding-center approximation
+      - Radial stability via dB/dr gradient
+
+      WHAT WE'RE OPTIMIZING:
+      - Coil positions, radii, and currents
+      - Goal: Maximize confinement time while maintaining stability
+
+      KNOWN LIMITATIONS OF CURRENT MODEL:
+      - No Coulomb collision effects (velocity-space diffusion)
+      - No thermal barrier physics
+      - No finite-Larmor-radius effects
+      - No kinetic instabilities (DCLC, AIC)
+      - No radial transport
+      - No plasma beta self-consistent equilibrium
+
+      CHALLENGE FOR AGENTS:
+      We've achieved ~0.96 fitness with mirror ratio ~50 and 99% confinement.
+      The optimization is plateauing. What NEW physics variables should we
+      discover that could break through? Think beyond textbooks - what hidden
+      degrees of freedom are we missing?
+
+  # ============================================================================
+  # GOLDEN PATH - Autonomous Ontological Discovery
+  # ============================================================================
+  # The Golden Path framework enables TRUE ontological discovery - finding hidden
+  # variables and patterns that don't exist in the current representation.
+  #
+  # Unlike parameter optimization, the Golden Path discovers NEW dimensions:
+  # - Prescience: Crisis detection (sees when evolution hits true walls)
+  # - Mentat: Program mining (extracts patterns from successful programs)
+  # - SietchFinder: Hidden variable discovery (proposes new dimensions)
+  # - GomJabbar: Validation (tests if discoveries are real)
+  # - SpiceAgony: Integration (adds validated variables to the system)
+  golden_path:
+    enabled: true
+
+    # Prescience (Crisis Detection) - detect ONTOLOGY_GAP vs just slow progress
+    prescience_short_window: 10
+    prescience_medium_window: 20    # Shorter for faster testing
+    prescience_long_window: 50
+    gradient_threshold: 0.002       # Slightly higher for noisy fitness
+    variance_threshold: 0.0001
+    diversity_threshold: 0.3
+
+    # Mentat (Pattern Mining) - extract structural patterns from programs
+    min_programs_for_analysis: 15   # Lower threshold for faster activation
+    top_n_patterns: 8
+    min_correlation_threshold: 0.25
+    min_discriminative_power: 0.15
+
+    # SietchFinder (Hidden Variable Discovery)
+    max_hypotheses_per_round: 4
+    use_pattern_mining: true
+    use_llm_hypothesis: true
+    use_domain_templates: true
+
+    # GomJabbar (Validation) - rigorous statistical tests
+    validation_min_correlation: 0.15
+    validation_max_p_value: 0.05
+    validation_min_incremental_r2: 0.02
+    validation_cv_folds: 5
+    validation_bootstrap_iterations: 100
+
+    # SpiceAgony (Integration)
+    auto_integrate: true
+    default_variable_weight: 0.1

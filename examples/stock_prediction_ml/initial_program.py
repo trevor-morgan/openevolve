@@ -32,7 +32,7 @@ def engineer_features(prices: np.ndarray, volumes: np.ndarray) -> np.ndarray:
     Returns:
         features: Array of shape (num_samples, sequence_length, num_features)
     """
-    num_samples, seq_len = prices.shape
+    _num_samples, seq_len = prices.shape
 
     # Basic returns
     returns = np.zeros_like(prices)
@@ -157,7 +157,7 @@ class StockPredictor(nn.Module):
         x = F.gelu(x)
 
         # LSTM
-        lstm_out, (h_n, c_n) = self.lstm(x)
+        lstm_out, (_h_n, _c_n) = self.lstm(x)
 
         # Attention over sequence
         if self.use_attention:

@@ -1216,11 +1216,11 @@ class BulletproofMetalEvaluator:
         summary = f"""Bulletproof Custom GQA Implementation Results:
 • Decode Speed: {current_decode:.1f} tokens/sec (baseline: {baseline_decode:.1f})
 • Improvement: {avg_improvement:+.1f}%
-• Memory Usage: {metrics['avg_memory_gb']:.2f} GB
+• Memory Usage: {metrics["avg_memory_gb"]:.2f} GB
 • Correctness: {correctness:.1%}
 • Safety Score: {safety_score:.1f}/100
-• Tests Passed: {metrics['num_successful_tests']}/{len(self._get_safe_benchmark_configs())}
-• Benchmarks Improved: {comparison['num_benchmarks_improved']}/{comparison['total_benchmarks']}
+• Tests Passed: {metrics["num_successful_tests"]}/{len(self._get_safe_benchmark_configs())}
+• Benchmarks Improved: {comparison["num_benchmarks_improved"]}/{comparison["total_benchmarks"]}
 • Metal Errors Handled: {self.total_metal_errors}"""
 
         if self.total_metal_errors == 0:
@@ -1274,9 +1274,9 @@ class BulletproofMetalEvaluator:
 
     def _print_bulletproof_evaluation_results(self, result: dict[str, Any]):
         """Print comprehensive bulletproof evaluation results"""
-        print(f"\n{'🛡️ '*25}")
+        print(f"\n{'🛡️ ' * 25}")
         print(f"{'🛡️  BULLETPROOF EVALUATION RESULTS  🛡️':^100}")
-        print(f"{'🛡️ '*25}")
+        print(f"{'🛡️ ' * 25}")
 
         if result["success"]:
             performance = result["performance_metrics"]
@@ -1326,7 +1326,7 @@ class BulletproofMetalEvaluator:
             safety_stats = result.get("metal_safety_statistics", {})
             print(f"🛡️  Metal Errors Handled: {safety_stats.get('total_metal_errors', 0)}")
 
-        print(f"{'🛡️ '*25}")
+        print(f"{'🛡️ ' * 25}")
 
     def _create_comprehensive_failure_result(self, error_message: str) -> dict[str, Any]:
         """Create comprehensive failure result with full error statistics"""
@@ -1373,9 +1373,9 @@ def test_bulletproof_evaluator():
     print(f"📁 Testing with bulletproof protection: {initial_program_path}")
     result = evaluate(initial_program_path)
 
-    print(f"\n{'🛡️ '*20}")
+    print(f"\n{'🛡️ ' * 20}")
     print("🔬 BULLETPROOF EVALUATOR TEST RESULTS")
-    print(f"{'🛡️ '*20}")
+    print(f"{'🛡️ ' * 20}")
     print(f"Success: {result['success']}")
     print(f"Final Score: {result.get('final_score', 'N/A')}")
 

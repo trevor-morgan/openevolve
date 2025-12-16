@@ -273,6 +273,10 @@ class InstrumentSynthesizer:
             str, list[str]
         ] = {}  # probe_type -> successful code patterns
 
+        # Statistics for checkpoint/restore
+        self.executed_probes: int = 0  # Counter for executed probes
+        self.discovered_variables: list[Variable] = []  # All discovered variables
+
         logger.info("Initialized InstrumentSynthesizer")
 
     async def synthesize_probes(
@@ -568,6 +572,8 @@ except Exception as e:
                 )
 
                 self.result_history.append(probe_result)
+                self.executed_probes += 1
+                self.discovered_variables.extend(discovered)
 
                 logger.info(
                     f"Probe {probe.id} discovered {len(discovered)} candidate variables "

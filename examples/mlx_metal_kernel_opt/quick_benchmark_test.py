@@ -56,11 +56,11 @@ def run_quick_test():
 
         benchmark_suite = Qwen3BenchmarkSuite()
 
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print("Quick Benchmark Test - Qwen3-0.6B")
         print(f"Testing {len(test_configs)} key scenarios with warmup")
         print("Purpose: Validate Metal kernel optimization baseline")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
 
         # Global warmup - run one quick test to warm up the system
         print("🔥 Running global warmup to initialize MLX and model...")
@@ -89,11 +89,11 @@ def run_quick_test():
 
         # Print summary
         if results:
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print("Quick Test Results Summary")
-            print(f"{'='*80}")
+            print(f"{'=' * 80}")
             print(f"{'Name':<25} {'Gen Tokens':<12} {'Decode Speed':<15} {'Memory':<10} {'CV%':<8}")
-            print(f"{'-'*80}")
+            print(f"{'-' * 80}")
 
             for result in results:
                 # Extract standard deviation from the result display if available
@@ -106,7 +106,7 @@ def run_quick_test():
                     f"{cv_display:<8}"
                 )
 
-            print(f"{'-'*80}")
+            print(f"{'-' * 80}")
             decode_speeds = [
                 r.decode_tokens_per_sec for r in results if r.decode_tokens_per_sec > 0
             ]
@@ -117,16 +117,16 @@ def run_quick_test():
                 )
                 print(f"Performance std dev: {np.std(decode_speeds):.1f} tokens/sec")
                 print(
-                    f"Overall consistency: {np.std(decode_speeds)/np.mean(decode_speeds)*100:.1f}% CV"
+                    f"Overall consistency: {np.std(decode_speeds) / np.mean(decode_speeds) * 100:.1f}% CV"
                 )
 
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print("Quick test complete! If this looks good, run the full benchmark suite.")
         print("Full suite: python qwen3_benchmark_suite.py")
         print("Compare mode: python run_benchmarks.py --mode compare")
         print("✅ All tests included proper warmup for reliable results")
         print("🎯 Ready to test custom Metal kernel optimization!")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
 
         return results
 

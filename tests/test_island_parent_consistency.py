@@ -89,7 +89,7 @@ class TestIslandParentConsistency(unittest.TestCase):
                 prog = Program(
                     id=f"prog_{i}",
                     code=f"def prog_{i}():\n{padding}    return {i * 100}",
-                    parent_id=f"prog_{i-1}",
+                    parent_id=f"prog_{i - 1}",
                     metrics={"score": 0.1 * i},
                     iteration_found=i,
                 )

@@ -49,7 +49,7 @@ def evaluate(program_path: str):
 
         if points.shape != (NUM_POINTS, DIMENSION):
             raise ValueError(
-                f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS,DIMENSION)}"
+                f"Invalid shapes: points = {points.shape}, expected {(NUM_POINTS, DIMENSION)}"
             )
 
         pairwise_distances = sp.spatial.distance.pdist(points)

@@ -275,7 +275,7 @@ def _run_remote_training(
             return None, artifacts
 
         # Run training on DGX
-        ret, stdout, stderr = run_remote(
+        _ret, stdout, stderr = run_remote(
             f"cd {DGX_WORK_DIR} && {DGX_PYTHON} train.py",
             timeout=timeout,
         )

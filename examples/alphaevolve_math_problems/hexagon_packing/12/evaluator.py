@@ -176,7 +176,7 @@ def verify_construction(
     for i in range(len(inner_hex_params_list)):
         for j in range(i + 1, len(inner_hex_params_list)):
             if not hexagons_are_disjoint(inner_hex_params_list[i], inner_hex_params_list[j], tol):
-                raise AssertionError(f"Hexagons {i+1} and {j+1} intersect!")
+                raise AssertionError(f"Hexagons {i + 1} and {j + 1} intersect!")
     # Containment check.
     if not all_hexagons_contained(inner_hex_params_list, outer_hex_params, tol):
         raise AssertionError("Not all inner hexagons are contained in the outer hexagon!")
@@ -209,7 +209,7 @@ def evaluate(program_path: str):
 
         if inner_hex_data.shape != (N_HEX, 3):
             raise ValueError(
-                f"Invalid shapes: inner_hex_data = {inner_hex_data.shape}, expected {(N_HEX,3)}"
+                f"Invalid shapes: inner_hex_data = {inner_hex_data.shape}, expected {(N_HEX, 3)}"
             )
 
         if outer_hex_data.shape != (3,):
