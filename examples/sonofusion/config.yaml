@@ -101,7 +101,13 @@ discovery:
     collaborative_discovery_enabled: true
     domain_context: |
       DOMAIN: Bubble Fusion / Sonoluminescence
-      The central debate is whether the bubble remains spherical enough during the final nanoseconds of collapse to focus energy into a fusion-capable hotspot.
-       instabilities (Rayleigh-Taylor) usually tear the bubble apart.
 
-      Challenge: Find a parameter space (viscosity, frequency, radius) where stability is maintained while T > 100 MK.
+      CRITICAL PROBLEM: Current simulations are crashing or predicting infinite temperatures because they model the gas as a point mass or ideal gas.
+
+      REQUIRED ONTOLOGICAL SHIFT:
+      You must upgrade the physics model itself. Do not just tune parameters.
+      1. Implement "Van der Waals Hard Core": The bubble radius R cannot go below R_hard = R0 / 8.5.
+      2. Implement "Plasma Shielding": At T > 10,000 K, the core becomes opaque, trapping heat (Blackbody radiation limit).
+      3. Implement "Shock Convergence": If Mach > 1, apply Rankine-Hugoniot heating on top of adiabatic heating.
+
+      GOAL: Modify the Python code to enforce these physical limits. If the simulation crashes with overflow, it means you are missing a limit.

@@ -39,11 +39,16 @@ def run_simulation() -> dict[str, Any]:
         "Liquid_Temp": 273.0,
         "Collapse_Sharpness": SURROGATE_DECAY,  # Evolve this!
         "Collapse_Depth": SURROGATE_C,  # Evolve this!
+        "Shock_Efficiency": 0.1,  # New parameter: how well does the shock focus?
     }
 
     results = simulate_surrogate(params)
 
-    return {"parameters": params, "results": results, "description": "Stable PhysicsML Surrogate"}
+    return {
+        "parameters": params,
+        "results": results,
+        "description": "Stable PhysicsML Surrogate with Shock",
+    }
 
 
 def simulate_surrogate(params: dict[str, Any]) -> dict[str, Any]:
@@ -74,9 +79,12 @@ def simulate_surrogate(params: dict[str, Any]) -> dict[str, Any]:
     R_norm = 1.0 + osc - collapse
 
     # Physics Constraints
+    # Van der Waals Hard Core Limit
+    # Atoms have finite volume. R cannot go below ~ R0 / 8.5
+    VDW_H_RATIO = 8.5
+    R_min_limit = 1.0 / VDW_H_RATIO
+
     # Radius cannot be negative (Surrogate might predict it if c is too large)
-    # Soft clamp at R_min_limit
-    R_min_limit = 0.01  # 1% of R0
     R_norm = np.maximum(R_norm, R_min_limit)
 
     R = R0 * R_norm
@@ -86,15 +94,28 @@ def simulate_surrogate(params: dict[str, Any]) -> dict[str, Any]:
     R_min = np.min(R)
     R_max = np.max(R)
 
-    # Temperature (Isentropic compression)
-    # T = T0 * (V0/V)^(gamma-1)
-    # At R_min:
-    compression = (R0 / R_min) ** 3
-    T_max = params["Liquid_Temp"] * (compression ** (POLY_GAMMA - 1))
-
     # Mach number
     C_L = 1481.0
     mach_max = np.max(np.abs(R_dot)) / C_L
+
+    # Temperature (Isentropic compression)
+    # T = T0 * (V0/V)^(gamma-1)
+    compression = (R0 / R_min) ** 3
+    T_adiabatic = params["Liquid_Temp"] * (compression ** (POLY_GAMMA - 1))
+
+    # Shock Heating (Rankine-Hugoniot approx for strong shock)
+    # Only active if wall speed exceeds speed of sound (Mach > 1)
+    T_shock = 0.0
+    gamma = POLY_GAMMA
+    if mach_max > 1.0:
+        # Strong shock limit: T2/T1 ~ 2*gamma*(gamma-1)/(gamma+1)^2 * M^2
+        # We apply this amplification to the already compressed core
+        coeff = (2 * gamma * (gamma - 1)) / ((gamma + 1) ** 2)
+        T_shock = T_adiabatic * coeff * (mach_max**2)
+
+    # Total Temperature
+    efficiency = params.get("Shock_Efficiency", 0.0)
+    T_max = T_adiabatic + efficiency * T_shock
 
     # Fusion Rate Estimate (Simple)
     # Rate ~ n^2 * <sigma v>
@@ -114,4 +135,5 @@ def simulate_surrogate(params: dict[str, Any]) -> dict[str, Any]:
         "fusion_yield": float(fusion_yield),
         "trace_t": t.tolist(),
         "trace_R": R.tolist(),
+        "shock_amplification": float(T_shock / T_adiabatic) if T_adiabatic > 0 else 0.0,
     }
