@@ -150,10 +150,10 @@ discovery:
 
     # Crisis detection - when are we stuck?
     # NOTE: Lowered thresholds to trigger collaborative discovery faster
-    min_plateau_iterations: 8         # Detect plateau after 8 iterations (was 15)
+    min_plateau_iterations: 2         # Detect plateau after 2 iterations (was 8)
     fitness_improvement_threshold: 0.005  # 0.5% improvement threshold (was 1%)
     variance_window: 8
-    crisis_confidence_threshold: 0.5  # Lower threshold (was 0.7)
+    crisis_confidence_threshold: 0.2  # Lower threshold (was 0.5)
     cooldown_iterations: 5            # Shorter cooldown (was 10)
 
     # Probe synthesis - hypothesize hidden variables
@@ -242,15 +242,18 @@ discovery:
     enabled: true
 
     # Prescience (Crisis Detection) - detect ONTOLOGY_GAP vs just slow progress
-    prescience_short_window: 10
-    prescience_medium_window: 20    # Shorter for faster testing
-    prescience_long_window: 50
+    prescience_short_window: 2
+    prescience_medium_window: 10    # Shorter for faster testing
+    prescience_long_window: 20
     gradient_threshold: 0.002       # Slightly higher for noisy fitness
     variance_threshold: 0.0001
     diversity_threshold: 0.3
 
+    # Orchestration - Force discovery early
+    min_programs_for_discovery: 5
+
     # Mentat (Pattern Mining) - extract structural patterns from programs
-    min_programs_for_analysis: 15   # Lower threshold for faster activation
+    min_programs_for_analysis: 5   # Lower threshold for faster activation
     top_n_patterns: 8
     min_correlation_threshold: 0.25
     min_discriminative_power: 0.15
