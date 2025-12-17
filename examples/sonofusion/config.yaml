@@ -51,8 +51,8 @@ prompt:
     - Must model "turnaround" (R_min) correctly using real gas EOS.
 
 database:
-  population_size: 20
-  archive_size: 10
+  population_size: 50
+  archive_size: 20
   num_islands: 2
   elite_selection_ratio: 0.2
   embedding_model: "text-embedding-3-small"
